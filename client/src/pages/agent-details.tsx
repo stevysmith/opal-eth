@@ -63,10 +63,16 @@ export default function AgentDetailsPage() {
       const response = await apiRequest("GET", `/api/agents/${agentId}`);
       const data = await response.json();
 
-      // Log the received data for debugging
+      console.log("API Response status:", response.status);
+      console.log("API Response headers:", Object.fromEntries(response.headers.entries()));
       console.log("Received agent data:", data);
 
       if (!response.ok || !data) {
+        console.error("Error details:", { 
+          status: response.status,
+          statusText: response.statusText,
+          data
+        });
         throw new Error(data?.error || "Failed to fetch agent");
       }
 
