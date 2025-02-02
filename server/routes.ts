@@ -211,19 +211,19 @@ export function registerRoutes(app: Express): Server {
 
       // For active items, also fetch participation details
       const enrichedPolls = await Promise.all(allPolls.map(async (poll) => {
-        const votes = await db
+        const pollVotes = await db
           .select()
           .from(votes)
           .where(eq(votes.pollId, poll.id));
 
         const voteCounts = (poll.options as string[]).map((_, index) => 
-          votes.filter(v => v.selectedOption === index).length
+          pollVotes.filter(v => v.selectedOption === index).length
         );
 
         return {
           ...poll,
           isActive: new Date(poll.endTime) > now,
-          totalVotes: votes.length,
+          totalVotes: pollVotes.length,
           voteCounts
         };
       }));
