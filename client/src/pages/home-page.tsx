@@ -1,7 +1,7 @@
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Plus, MessageSquare, Award, BarChart3, Loader2 } from "lucide-react";
 import type { SelectAgent } from "@db/schema";
 import {
@@ -25,6 +25,7 @@ export default function HomePage() {
     retry: false
   });
   const [pendingAgents, setPendingAgents] = useState<Set<number>>(new Set());
+  const [, setLocation] = useLocation();
 
   const toggleMutation = useMutation({
     mutationFn: async (agentId: number) => {
@@ -63,6 +64,10 @@ export default function HomePage() {
       </div>
     );
   }
+
+  const handleViewDetails = (agentId: number) => {
+    setLocation(`/agents/${agentId}`);
+  };
 
   return (
     <div className="min-h-screen p-8">
@@ -117,11 +122,13 @@ export default function HomePage() {
               </CardContent>
               <CardFooter>
                 <div className="w-full flex justify-between items-center">
-                  <Link href={`/agents/${agent.id}`}>
-                    <Button variant="ghost" size="sm">
-                      View Details
-                    </Button>
-                  </Link>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleViewDetails(agent.id)}
+                  >
+                    View Details
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
