@@ -138,21 +138,19 @@ export function registerRoutes(app: Express): Server {
 
         // Check if the bot is actually running
         const isRunning = botManager.isAgentRunning(agent.id);
-        const hasActivePollsOrGiveaways = activePolls.length > 0 || activeGiveaways.length > 0;
-        const shouldBeActive = hasActivePollsOrGiveaways || isRunning;
 
-        // Update agent's active status if it doesn't match reality
-        if (shouldBeActive !== agent.active) {
-          console.log(`Updating agent ${agent.id} active status to match reality:`, {
+        // Update agent's active status if it doesn't match the running state
+        if (isRunning !== agent.active) {
+          console.log(`Updating agent ${agent.id} active status to match running state:`, {
             current: agent.active,
-            shouldBe: shouldBeActive,
+            shouldBe: isRunning,
             isRunning,
-            hasActivePollsOrGiveaways
+            hasActiveItems: activePolls.length > 0 || activeGiveaways.length > 0
           });
 
           const [updatedAgent] = await db
             .update(agents)
-            .set({ active: shouldBeActive })
+            .set({ active: isRunning })
             .where(eq(agents.id, agent.id))
             .returning();
 
