@@ -1,8 +1,8 @@
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Plus, MessageSquare, Award, BarChart3 } from "lucide-react";
+import { Plus, MessageSquare, Award, BarChart3, Loader2 } from "lucide-react";
 import type { SelectAgent } from "@db/schema";
 import {
   Card,
@@ -13,10 +13,30 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 export default function HomePage() {
   const { user, logoutMutation } = useAuth();
+  const { toast } = useToast();
   const { data: agents } = useQuery<SelectAgent[]>({ queryKey: ["/api/agents"] });
+
+  const toggleAgentMutation = useMutation({
+    mutationFn: async (agentId: number) => {
+      const response = await apiRequest("POST", `/api/agents/${agentId}/toggle`);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/agents"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   return (
     <div className="min-h-screen p-8">
@@ -93,13 +113,12 @@ export default function HomePage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      // Toggle bot status
-                      fetch(`/api/agents/${agent.id}/toggle`, {
-                        method: "POST",
-                      });
-                    }}
+                    onClick={() => toggleAgentMutation.mutate(agent.id)}
+                    disabled={toggleAgentMutation.isPending}
                   >
+                    {toggleAgentMutation.isPending && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
                     {agent.active ? "Stop" : "Start"}
                   </Button>
                 </div>
