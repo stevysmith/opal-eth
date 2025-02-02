@@ -247,7 +247,7 @@ class BotManager {
       case "poll":
         return "📊 /poll \"Question\" [\"Option1\",\"Option2\"]\n🗳️ /vote <poll_id> <option_number>";
       case "giveaway":
-        return "🎉 /giveaway <prize> in <duration_in_mins|hours|h>\n🎫 /enter <giveaway_id>";
+        return "🎉 /giveaway <prize> in <duration_in_mins|hours|h>\n🎫 /enter <giveaway_id> <your-wallet-address>";
       case "qa":
         return "❓ Just send your questions in the chat!";
       default:
@@ -492,7 +492,7 @@ class BotManager {
 
         console.log(`[Bot ${agentId}] Created giveaway:`, giveaway);
 
-          // Send confirmation message to the channel
+        // Send confirmation message to the channel
         const chatId = ctx.chat?.id.toString();
         console.log(`[Bot ${agentId}] Sending confirmation to chat:`, chatId);
         const me = await bot.telegram.getMe();
@@ -503,10 +503,10 @@ class BotManager {
           `Duration: ${durationHours < 1 ? `${Math.round(durationHours * 60)} minutes` : `${durationHours} hours`}\n\n` +
           `To participate:\n` +
           `1. Open a direct message with @${me.username}\n` +
-          `2. Send the command: /enter ${giveaway.id}\n\n` +
-          `Make sure you have configured your wallet address in the web dashboard to receive prizes!`
+          `2. Send the command: /enter ${giveaway.id} <your-wallet-address>\n\n` +
+          `Example: /enter ${giveaway.id} 0x742d35Cc6634C0532925a3b844Bc454e4438f44e\n\n` +
+          `Make sure to provide a valid wallet address to receive your prize if you win!`
         );
-
 
         console.log(`[Bot ${agentId}] Sent confirmation message:`, response);
 
@@ -571,6 +571,11 @@ class BotManager {
       }
     };
 
+    const validateWalletAddress = (address: string): boolean => {
+      // Basic Ethereum address validation
+      return /^0x[a-fA-F0-9]{40}$/.test(address);
+    };
+
     const handleEnterCommand = async (ctx: Context) => {
       try {
         const text = ctx.message?.text || ctx.channelPost?.text || '';
@@ -586,20 +591,38 @@ class BotManager {
         if (ctx.channelPost) {
           const me = await bot.telegram.getMe();
           return bot.telegram.sendMessage(
-            ctx.chat.id,
+            ctx.chat!.id,
             '🎫 To enter the giveaway, please follow these steps:\n\n' +
             `1. Click this link to open chat: @${me.username}\n` +
-            `2. Send the command: /enter ${giveawayId}\n\n` +
-            'This ensures we can properly link your entry to your wallet address for prize distribution.\n\n' +
-            'Remember: You need to have your wallet address configured in the web dashboard to receive prizes!'
+            `2. Send the command: /enter <giveaway-id> <your-wallet-address>\n\n` +
+            'Example: /enter 123 0x742d35Cc6634C0532925a3b844Bc454e4438f44e\n\n' +
+            'This ensures we can properly link your entry to your wallet address for prize distribution.'
           );
         }
 
-        const giveawayId = parseInt(text.split(" ")[1]);
-        console.log(`[Bot ${agentId}] Parsed giveaway ID:`, giveawayId);
+        const parts = text.split(' ');
+        if (parts.length !== 3) {
+          return ctx.reply(
+            "Please provide both the giveaway ID and your wallet address.\n" +
+            "Format: /enter <giveaway-id> <wallet-address>\n" +
+            "Example: /enter 123 0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
+          );
+        }
+
+        const [, giveawayIdStr, walletAddress] = parts;
+        const giveawayId = parseInt(giveawayIdStr);
+
+        console.log(`[Bot ${agentId}] Parsed entry:`, { giveawayId, walletAddress });
 
         if (isNaN(giveawayId)) {
-          return ctx.reply("Please provide a valid giveaway ID. Example: /enter 123");
+          return ctx.reply("Please provide a valid giveaway ID. Example: /enter 123 0x742d35Cc6634C0532925a3b844Bc454e4438f44e");
+        }
+
+        if (!validateWalletAddress(walletAddress)) {
+          return ctx.reply(
+            "❌ Invalid wallet address format. Please provide a valid Ethereum wallet address.\n" +
+            "It should start with '0x' followed by 40 hexadecimal characters."
+          );
         }
 
         const [giveaway] = await db
@@ -623,20 +646,6 @@ class BotManager {
 
         const userId = ctx.from.id.toString();
 
-        // Check if user has wallet configured
-        const [userRecord] = await db
-          .select()
-          .from(users)
-          .where(eq(users.username, userId))
-          .limit(1);
-
-        if (!userRecord?.walletAddress) {
-          return ctx.reply(
-            "⚠️ You need to set up your wallet address first before entering giveaways.\n\n" +
-            "Please visit the web dashboard to configure your wallet address."
-          );
-        }
-
         // Check if user already entered
         const [existingEntry] = await db
           .select()
@@ -655,12 +664,13 @@ class BotManager {
         await db.insert(giveawayEntries).values({
           giveawayId: giveaway.id,
           userId,
+          walletAddress,
         });
 
         console.log(`[Bot ${agentId}] User ${userId} successfully entered giveaway ${giveawayId}`);
         ctx.reply(
           "🎫 You've been entered into the giveaway! Good luck!\n\n" +
-          "Make sure your wallet address is correctly configured in the web dashboard to receive prizes."
+          `Your wallet address ${walletAddress} has been registered for the prize distribution.`
         );
       } catch (error) {
         console.error(`[Bot ${agentId}] Error handling enter command:`, error);
