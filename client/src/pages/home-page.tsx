@@ -1,8 +1,8 @@
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Link } from "wouter";
-import { Plus, MessageSquare, Award, BarChart3, Loader2 } from "lucide-react";
+import { Link, useLocation } from "wouter";
+import { Plus, MessageSquare, Award, BarChart3, Loader2, ArrowRight } from "lucide-react";
 import type { SelectAgent } from "@db/schema";
 import {
   Card,
@@ -16,12 +16,14 @@ import { Badge } from "@/components/ui/badge";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
+import { formatDistanceToNow } from "date-fns";
 
 export default function HomePage() {
   const { user, logoutMutation } = useAuth();
   const { toast } = useToast();
   const { data: agents } = useQuery<SelectAgent[]>({ queryKey: ["/api/agents"] });
   const [pendingAgents, setPendingAgents] = useState<Set<number>>(new Set());
+  const [, navigate] = useLocation();
 
   const toggleMutation = useMutation({
     mutationFn: async (agentId: number) => {
@@ -76,7 +78,7 @@ export default function HomePage() {
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {agents?.map((agent) => (
-            <Card key={agent.id}>
+            <Card key={agent.id} className="relative group">
               <CardHeader>
                 <div className="flex justify-between items-start">
                   <div>
@@ -102,29 +104,38 @@ export default function HomePage() {
                     <span className="font-medium">Channel:</span>{" "}
                     {(agent.platformConfig as { channelId: string })?.channelId}
                   </div>
-                  <div className="text-sm">
-                    <span className="font-medium">Persona:</span>{" "}
-                    {agent.persona?.tone}
-                  </div>
+                  {agent.activePolls && agent.activePolls.length > 0 && (
+                    <div className="mt-4">
+                      <h4 className="text-sm font-medium mb-2">Active Polls</h4>
+                      {agent.activePolls.slice(0, 2).map((poll) => (
+                        <div key={poll.id} className="text-sm text-muted-foreground">
+                          • {poll.question} (ends {formatDistanceToNow(new Date(poll.endTime), { addSuffix: true })})
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {agent.activeGiveaways && agent.activeGiveaways.length > 0 && (
+                    <div className="mt-4">
+                      <h4 className="text-sm font-medium mb-2">Active Giveaways</h4>
+                      {agent.activeGiveaways.slice(0, 2).map((giveaway) => (
+                        <div key={giveaway.id} className="text-sm text-muted-foreground">
+                          • {giveaway.prize} (ends {formatDistanceToNow(new Date(giveaway.endTime), { addSuffix: true })})
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </CardContent>
               <CardFooter>
                 <div className="w-full flex justify-between items-center">
-                  {agent.template === "poll" && (
-                    <div className="text-sm text-muted-foreground">
-                      Use /poll to create a new poll
-                    </div>
-                  )}
-                  {agent.template === "giveaway" && (
-                    <div className="text-sm text-muted-foreground">
-                      Use /giveaway to start a giveaway
-                    </div>
-                  )}
-                  {agent.template === "qa" && (
-                    <div className="text-sm text-muted-foreground">
-                      Send messages to start Q&A
-                    </div>
-                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => navigate(`/agents/${agent.id}`)}
+                  >
+                    View Details
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"

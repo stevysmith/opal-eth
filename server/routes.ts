@@ -2,8 +2,8 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { db } from "@db";
-import { agents, polls, giveaways, type SelectAgent, type PlatformConfig } from "@db/schema";
-import { eq, and, gt } from "drizzle-orm";
+import { agents, polls, giveaways, type SelectAgent, type PlatformConfig, votes, giveawayEntries } from "@db/schema";
+import { eq, and, gt, desc } from "drizzle-orm";
 import { botManager } from "./services/bot-manager";
 
 export function registerRoutes(app: Express): Server {
@@ -127,6 +127,90 @@ export function registerRoutes(app: Express): Server {
       console.error("Error fetching agents:", error);
       res.status(500).json({ 
         error: "Failed to fetch agents",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Get single agent with details
+  app.get("/api/agents/:id", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+
+    try {
+      const agentId = parseInt(req.params.id);
+      const [agent] = await db
+        .select()
+        .from(agents)
+        .where(and(
+          eq(agents.id, agentId),
+          eq(agents.userId, req.user.id)
+        ))
+        .limit(1);
+
+      if (!agent) {
+        return res.status(404).json({ error: "Agent not found" });
+      }
+
+      const now = new Date();
+
+      // Get both active and past polls/giveaways
+      const allPolls = agent.template === "poll"
+        ? await db
+            .select()
+            .from(polls)
+            .where(eq(polls.agentId, agent.id))
+            .orderBy(desc(polls.createdAt))
+        : [];
+
+      const allGiveaways = agent.template === "giveaway"
+        ? await db
+            .select()
+            .from(giveaways)
+            .where(eq(giveaways.agentId, agent.id))
+            .orderBy(desc(giveaways.createdAt))
+        : [];
+
+      // For active items, also fetch participation details
+      const enrichedPolls = await Promise.all(allPolls.map(async (poll) => {
+        const votes = await db
+          .select()
+          .from(votes)
+          .where(eq(votes.pollId, poll.id));
+
+        const voteCounts = (poll.options as string[]).map((_, index) => 
+          votes.filter(v => v.selectedOption === index).length
+        );
+
+        return {
+          ...poll,
+          isActive: new Date(poll.endTime) > now,
+          totalVotes: votes.length,
+          voteCounts
+        };
+      }));
+
+      const enrichedGiveaways = await Promise.all(allGiveaways.map(async (giveaway) => {
+        const entries = await db
+          .select()
+          .from(giveawayEntries)
+          .where(eq(giveawayEntries.giveawayId, giveaway.id));
+
+        return {
+          ...giveaway,
+          isActive: new Date(giveaway.endTime) > now,
+          totalEntries: entries.length
+        };
+      }));
+
+      res.json({
+        ...agent,
+        polls: enrichedPolls,
+        giveaways: enrichedGiveaways
+      });
+    } catch (error) {
+      console.error("Error fetching agent:", error);
+      res.status(500).json({ 
+        error: "Failed to fetch agent details",
         details: error instanceof Error ? error.message : "Unknown error"
       });
     }
