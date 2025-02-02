@@ -153,32 +153,37 @@ class BotManager {
   private setupPollCommands(bot: Telegraf<Context<Update>>, agentId: number) {
     bot.command("poll", async (ctx) => {
       try {
-        console.log(`[Bot ${agentId}] Received poll command:`, ctx.message.text);
+        console.log(`[Bot ${agentId}] Processing poll command. Full message:`, ctx.message);
         const message = ctx.message.text.substring(6).trim(); // Remove '/poll ' and trim
+        console.log(`[Bot ${agentId}] Extracted message:`, message);
 
         // Find the question part (everything up to the first [)
-        const questionEndIndex = message.lastIndexOf('" [');
-        if (questionEndIndex === -1) {
+        const questionMatch = message.match(/"([^"]+)"/);
+        if (!questionMatch) {
+          console.log(`[Bot ${agentId}] No valid question found in format`);
           return ctx.reply("Invalid format. Use: /poll \"Question\" [\"Option1\",\"Option2\"]");
         }
 
-        const question = message.substring(0, questionEndIndex + 1);
-        const optionsStr = message.substring(questionEndIndex + 2);
+        const question = questionMatch[1];
+        const optionsMatch = message.match(/\[(.*)\]/);
 
-        console.log(`[Bot ${agentId}] Parsed poll:`, { question, optionsStr });
-
-        if (!question || !optionsStr) {
+        if (!optionsMatch) {
+          console.log(`[Bot ${agentId}] No valid options array found`);
           return ctx.reply("Invalid format. Use: /poll \"Question\" [\"Option1\",\"Option2\"]");
         }
 
-        // Clean up the options string and parse it
-        const cleanOptionsStr = optionsStr
-          .replace(/,\s*]/g, ']') // Remove trailing commas before ]
-          .replace(/\s+/g, ' '); // Normalize whitespace
+        // Clean up the options string
+        const optionsStr = optionsMatch[1]
+          .replace(/,\s*]/g, '') // Remove trailing commas
+          .replace(/\s+/g, ' ') // Normalize whitespace
+          .trim();
+
+        console.log(`[Bot ${agentId}] Cleaned options string:`, optionsStr);
 
         let options;
         try {
-          options = JSON.parse(cleanOptionsStr);
+          options = JSON.parse(`[${optionsStr}]`);
+          console.log(`[Bot ${agentId}] Parsed options:`, options);
         } catch (error) {
           console.error(`[Bot ${agentId}] Error parsing options:`, error);
           return ctx.reply(
@@ -188,6 +193,7 @@ class BotManager {
         }
 
         if (!Array.isArray(options) || options.length < 2) {
+          console.log(`[Bot ${agentId}] Invalid options array:`, options);
           return ctx.reply("You must provide at least 2 options");
         }
 
@@ -195,15 +201,15 @@ class BotManager {
         endTime.setHours(endTime.getHours() + 24); // 24 hour polls
 
         console.log(`[Bot ${agentId}] Creating poll in database:`, {
-          question: question.replace(/^"|"$/g, ''),
+          question,
           options,
           endTime
         });
 
         const [poll] = await db.insert(polls).values({
           agentId,
-          question: question.replace(/^"|"$/g, ''),
-          options: options,
+          question,
+          options,
           startTime: new Date(),
           endTime,
         }).returning();
@@ -215,30 +221,36 @@ class BotManager {
           .map((opt: string, i: number) => `${i + 1}. ${opt}`)
           .join("\n");
 
-        await ctx.reply(
+        const response = await ctx.reply(
           `📊 New Poll:\n\n${poll.question}\n\n${optionsMessage}\n\nVote using: /vote ${poll.id} <option number>`
         );
 
+        console.log(`[Bot ${agentId}] Poll message sent:`, response);
+
         // Schedule poll end
         this.jobs.set(poll.id, schedule.scheduleJob(endTime, async () => {
-          const results = await db
-            .select()
-            .from(votes)
-            .where(eq(votes.pollId, poll.id));
+          try {
+            const results = await db
+              .select()
+              .from(votes)
+              .where(eq(votes.pollId, poll.id));
 
-          const counts = results.reduce((acc: Record<number, number>, vote) => {
-            acc[vote.selectedOption] = (acc[vote.selectedOption] || 0) + 1;
-            return acc;
-          }, {});
+            const counts = results.reduce((acc: Record<number, number>, vote) => {
+              acc[vote.selectedOption] = (acc[vote.selectedOption] || 0) + 1;
+              return acc;
+            }, {});
 
-          const resultsMessage = options
-            .map((opt: string, i: number) =>
-              `${opt}: ${counts[i] || 0} votes`)
-            .join("\n");
+            const resultsMessage = options
+              .map((opt: string, i: number) =>
+                `${opt}: ${counts[i] || 0} votes`)
+              .join("\n");
 
-          await ctx.reply(
-            `📊 Poll Results:\n\n${poll.question}\n\n${resultsMessage}`
-          );
+            await ctx.reply(
+              `📊 Poll Results:\n\n${poll.question}\n\n${resultsMessage}`
+            );
+          } catch (error) {
+            console.error(`[Bot ${agentId}] Error sending poll results:`, error);
+          }
         }));
       } catch (error) {
         console.error(`[Bot ${agentId}] Error creating poll:`, error);
