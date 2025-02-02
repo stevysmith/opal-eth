@@ -1,10 +1,10 @@
 import { Route, Switch } from "wouter";
 import { WizardLayout } from "@/components/wizard/WizardLayout";
 import { WizardProvider } from "@/hooks/use-wizard";
-import TemplateStep from "./template";
-import PersonaStep from "./persona";
-import PlatformStep from "./platform";
-import ReviewStep from "./review";
+import TemplateStep from "./template.tsx";
+import PersonaStep from "./persona.tsx";
+import PlatformStep from "./platform.tsx";
+import ReviewStep from "./review.tsx";
 
 export default function WizardPage() {
   return (
