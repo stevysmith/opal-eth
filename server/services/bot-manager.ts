@@ -134,7 +134,7 @@ class BotManager {
     }
   }
 
-  async initializeAgent(agentId: number) {
+  private async initializeAgent(agentId: number) {
     try {
       // Stop any existing bot first and wait for cleanup
       console.log(`[Bot ${agentId}] Stopping existing bot instance if any...`);
@@ -209,6 +209,15 @@ class BotManager {
           await bot.launch();
           console.log(`[Bot ${agentId}] Bot launched successfully`);
           started = true;
+
+          // Send welcome message only after successful launch
+          console.log(`[Bot ${agentId}] Sending welcome message to channel...`);
+          const welcomeMessage = await bot.telegram.sendMessage(
+            formattedChannelId,
+            `🤖 Bot restarted and ready!\n\nTemplate: ${agent.template}\nName: ${agent.name}\n\nUse the following commands:\n${this.getCommandList(agent.template)}`
+          );
+          console.log(`[Bot ${agentId}] Welcome message sent successfully:`, welcomeMessage);
+
         } catch (error) {
           console.error(`[Bot ${agentId}] Launch attempt ${attempt} failed:`, error);
           if (error.message?.includes('409: Conflict')) {
@@ -223,25 +232,6 @@ class BotManager {
       if (!started) {
         throw new Error("Failed to start bot after multiple attempts");
       }
-    // Test channel connection
-    try {
-      console.log(`[Bot ${agentId}] Testing channel connection (${formattedChannelId})...`);
-      const message = await bot.telegram.sendMessage(
-        formattedChannelId,
-        `🤖 Bot restarted and ready!\n\nTemplate: ${agent.template}\nName: ${agent.name}\n\nUse the following commands:\n${this.getCommandList(agent.template)}`
-      );
-      console.log(`[Bot ${agentId}] Test message sent successfully:`, message);
-    } catch (error) {
-      console.error(`[Bot ${agentId}] Failed to send test message:`, error);
-      throw new Error(
-        `Failed to send message to channel ${formattedChannelId}.\n` +
-        `Error: ${error.message}\n` +
-        'Please ensure:\n' +
-        '1. The channel ID is correct\n' +
-        '2. The bot is added to the channel\n' +
-        '3. The bot is an administrator in the channel'
-      );
-    }
 
       // Store bot instance
       this.bots.set(agentId, bot);
