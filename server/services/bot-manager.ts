@@ -236,9 +236,12 @@ class BotManager {
 
           // Launch with timeout
           await Promise.race([
-            bot.launch(),
+            bot.launch().catch(e => {
+              console.error(`[Bot ${agentId}] Launch promise rejected:`, e);
+              throw e;
+            }),
             new Promise((_, reject) => 
-              setTimeout(() => reject(new Error("Internal launch timeout")), 10000)
+              setTimeout(() => reject(new Error("Internal launch timeout (30s)")), 30000)
             )
           ]);
 
