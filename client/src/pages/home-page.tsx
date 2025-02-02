@@ -2,8 +2,17 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Plus } from "lucide-react";
+import { Plus, MessageSquare, Award, BarChart3 } from "lucide-react";
 import type { SelectAgent } from "@db/schema";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 export default function HomePage() {
   const { user, logoutMutation } = useAuth();
@@ -32,12 +41,70 @@ export default function HomePage() {
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {agents?.map((agent) => (
-            <div key={agent.id} className="p-6 rounded-lg border bg-card">
-              <h3 className="font-semibold">{agent.name}</h3>
-              <p className="text-sm text-muted-foreground">
-                {agent.template} • {agent.platform}
-              </p>
-            </div>
+            <Card key={agent.id}>
+              <CardHeader>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle>{agent.name}</CardTitle>
+                    <CardDescription className="flex items-center gap-2">
+                      {agent.template === "poll" && <BarChart3 className="w-4 h-4" />}
+                      {agent.template === "giveaway" && <Award className="w-4 h-4" />}
+                      {agent.template === "qa" && <MessageSquare className="w-4 h-4" />}
+                      {agent.template}
+                    </CardDescription>
+                  </div>
+                  <Badge variant={agent.active ? "default" : "secondary"}>
+                    {agent.active ? "Active" : "Inactive"}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="text-sm">
+                    <span className="font-medium">Platform:</span> {agent.platform}
+                  </div>
+                  <div className="text-sm">
+                    <span className="font-medium">Channel:</span>{" "}
+                    {(agent.platformConfig as { channelId: string })?.channelId}
+                  </div>
+                  <div className="text-sm">
+                    <span className="font-medium">Persona:</span>{" "}
+                    {agent.persona?.tone}
+                  </div>
+                </div>
+              </CardContent>
+              <CardFooter>
+                <div className="w-full flex justify-between items-center">
+                  {agent.template === "poll" && (
+                    <div className="text-sm text-muted-foreground">
+                      Use /poll to create a new poll
+                    </div>
+                  )}
+                  {agent.template === "giveaway" && (
+                    <div className="text-sm text-muted-foreground">
+                      Use /giveaway to start a giveaway
+                    </div>
+                  )}
+                  {agent.template === "qa" && (
+                    <div className="text-sm text-muted-foreground">
+                      Send messages to start Q&A
+                    </div>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      // Toggle bot status
+                      fetch(`/api/agents/${agent.id}/toggle`, {
+                        method: "POST",
+                      });
+                    }}
+                  >
+                    {agent.active ? "Stop" : "Start"}
+                  </Button>
+                </div>
+              </CardFooter>
+            </Card>
           ))}
         </div>
 

@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { db } from "@db";
-import { agents, type SelectAgent, type PlatformConfig } from "@db/schema";
+import { agents, polls, giveaways, type SelectAgent, type PlatformConfig } from "@db/schema";
 import { eq } from "drizzle-orm";
 import { botManager } from "./services/bot-manager";
 
@@ -73,11 +73,40 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // List user's agents
+  // List user's agents with active polls and giveaways
   app.get("/api/agents", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
-    const userAgents = await db.select().from(agents).where(eq(agents.userId, req.user.id));
-    res.json(userAgents);
+
+    try {
+      const userAgents = await db.select().from(agents)
+        .where(eq(agents.userId, req.user.id));
+
+      // Fetch active polls and giveaways for each agent
+      const enrichedAgents = await Promise.all(userAgents.map(async (agent) => {
+        const activePolls = agent.template === "poll" 
+          ? await db.select().from(polls)
+              .where(eq(polls.agentId, agent.id))
+              .where(eq(polls.endTime > new Date()))
+          : [];
+
+        const activeGiveaways = agent.template === "giveaway"
+          ? await db.select().from(giveaways)
+              .where(eq(giveaways.agentId, agent.id))
+              .where(eq(giveaways.endTime > new Date()))
+          : [];
+
+        return {
+          ...agent,
+          activePolls,
+          activeGiveaways,
+        };
+      }));
+
+      res.json(enrichedAgents);
+    } catch (error) {
+      console.error("Error fetching agents:", error);
+      res.status(500).json({ error: "Failed to fetch agents" });
+    }
   });
 
   // Toggle agent activation
@@ -117,7 +146,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-    // Clean up bots when server shuts down
+  // Clean up bots when server shuts down
   process.on('SIGTERM', async () => {
     await botManager.stopAll();
     process.exit(0);
