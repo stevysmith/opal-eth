@@ -12,11 +12,12 @@ import { Loader2, MessageSquare, Award, BarChart3 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { apiRequest } from "@/lib/queryClient";
 
-// Define types for the enriched agent data
+// Define comprehensive types for each feature
 interface Poll {
   id: number;
   question: string;
   options: string[];
+  startTime: string;
   endTime: string;
   isActive: boolean;
   totalVotes: number;
@@ -26,6 +27,7 @@ interface Poll {
 interface Giveaway {
   id: number;
   prize: string;
+  startTime: string;
   endTime: string;
   isActive: boolean;
   totalEntries: number;
@@ -52,6 +54,117 @@ interface EnrichedAgent {
   giveaways?: Giveaway[];
 }
 
+// Separate components for each agent type
+function PollDetails({ polls }: { polls: Poll[] }) {
+  return (
+    <Card className="mt-6">
+      <CardHeader>
+        <CardTitle>Poll Results</CardTitle>
+        <CardDescription>
+          View all polls and their statistics
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {polls.map((poll) => (
+          <Card key={poll.id} className="border">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">{poll.question}</CardTitle>
+                <Badge variant={poll.isActive ? "default" : "secondary"}>
+                  {poll.isActive ? "Active" : "Ended"}
+                </Badge>
+              </div>
+              <CardDescription>
+                {poll.isActive
+                  ? `Ends ${formatDistanceToNow(new Date(poll.endTime), { addSuffix: true })}`
+                  : `Ended ${formatDistanceToNow(new Date(poll.endTime), { addSuffix: true })}`}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {poll.options.map((option, index) => (
+                  <div key={index} className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium">{option}</span>
+                      <span className="text-muted-foreground">
+                        {poll.voteCounts[index]} votes
+                        ({poll.totalVotes > 0
+                          ? Math.round((poll.voteCounts[index] / poll.totalVotes) * 100)
+                          : 0}%)
+                      </span>
+                    </div>
+                    <div className="w-full bg-secondary h-2 rounded-full overflow-hidden">
+                      <div
+                        className="bg-primary h-full transition-all"
+                        style={{
+                          width: `${poll.totalVotes > 0
+                            ? (poll.voteCounts[index] / poll.totalVotes) * 100
+                            : 0}%`
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+                <p className="text-sm text-muted-foreground mt-4">
+                  Total votes: {poll.totalVotes}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function GiveawayDetails({ giveaways }: { giveaways: Giveaway[] }) {
+  return (
+    <Card className="mt-6">
+      <CardHeader>
+        <CardTitle>Giveaway Status</CardTitle>
+        <CardDescription>
+          Track all giveaways and their participants
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {giveaways.map((giveaway) => (
+          <Card key={giveaway.id} className="border">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">{giveaway.prize}</CardTitle>
+                <Badge variant={giveaway.isActive ? "default" : "secondary"}>
+                  {giveaway.isActive ? "Active" : "Ended"}
+                </Badge>
+              </div>
+              <CardDescription>
+                {giveaway.isActive
+                  ? `Ends ${formatDistanceToNow(new Date(giveaway.endTime), { addSuffix: true })}`
+                  : `Ended ${formatDistanceToNow(new Date(giveaway.endTime), { addSuffix: true })}`}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">
+                    Total Entries
+                  </span>
+                  <span className="font-medium">{giveaway.totalEntries}</span>
+                </div>
+                {!giveaway.isActive && giveaway.winnerId && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Winner</span>
+                    <span className="font-medium">@{giveaway.winnerId}</span>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AgentDetailsPage() {
   const params = useParams<{ id: string }>();
   const agentId = params.id ? parseInt(params.id) : undefined;
@@ -61,22 +174,18 @@ export default function AgentDetailsPage() {
     queryFn: async () => {
       if (!agentId) throw new Error("No agent ID provided");
       const response = await apiRequest("GET", `/api/agents/${agentId}`);
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData?.error || "Failed to fetch agent");
-      }
-      
       const data = await response.json();
-      if (!data || typeof data !== 'object') {
-        throw new Error("Invalid response format");
-      }
 
       console.log("Received agent data:", data);
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to fetch agent");
+      }
+
       return data as EnrichedAgent;
     },
     enabled: !!agentId,
     retry: false,
-    refetchOnWindowFocus: false
   });
 
   if (isLoading) {
@@ -101,7 +210,7 @@ export default function AgentDetailsPage() {
 
   return (
     <div className="min-h-screen p-8">
-      <div className="max-w-7xl mx-auto space-y-8">
+      <div className="max-w-7xl mx-auto space-y-6">
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-3xl font-bold mb-2">{agent.name}</h1>
@@ -140,64 +249,26 @@ export default function AgentDetailsPage() {
           </CardContent>
         </Card>
 
-        {agent.template === "poll" && agent.polls && agent.polls.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Polls</CardTitle>
-              <CardDescription>All polls created by this agent</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {agent.polls.map((poll) => (
-                <div key={poll.id} className="border rounded-lg p-4">
-                  <h3 className="font-semibold mb-2">{poll.question}</h3>
-                  <div className="space-y-2">
-                    {poll.options.map((option, index) => (
-                      <div key={index} className="flex justify-between">
-                        <span>{option}</span>
-                        <span className="text-muted-foreground">
-                          {poll.voteCounts[index]} votes
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-4 flex justify-between items-center text-sm text-muted-foreground">
-                    <span>Total votes: {poll.totalVotes}</span>
-                    <span>
-                      {poll.isActive ? (
-                        `Ends ${formatDistanceToNow(new Date(poll.endTime), { addSuffix: true })}`
-                      ) : (
-                        `Ended ${formatDistanceToNow(new Date(poll.endTime), { addSuffix: true })}`
-                      )}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+        {agent.template === "poll" && agent.polls && (
+          <PollDetails polls={agent.polls} />
         )}
 
-        {agent.template === "giveaway" && agent.giveaways && agent.giveaways.length > 0 && (
-          <Card>
+        {agent.template === "giveaway" && agent.giveaways && (
+          <GiveawayDetails giveaways={agent.giveaways} />
+        )}
+
+        {agent.template === "qa" && (
+          <Card className="mt-6">
             <CardHeader>
-              <CardTitle>Giveaways</CardTitle>
-              <CardDescription>All giveaways created by this agent</CardDescription>
+              <CardTitle>Q&A History</CardTitle>
+              <CardDescription>
+                View all questions and responses
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {agent.giveaways.map((giveaway) => (
-                <div key={giveaway.id} className="border rounded-lg p-4">
-                  <h3 className="font-semibold mb-2">{giveaway.prize}</h3>
-                  <div className="flex justify-between items-center text-sm text-muted-foreground">
-                    <span>{giveaway.totalEntries} entries</span>
-                    <span>
-                      {giveaway.isActive ? (
-                        `Ends ${formatDistanceToNow(new Date(giveaway.endTime), { addSuffix: true })}`
-                      ) : (
-                        `Ended ${formatDistanceToNow(new Date(giveaway.endTime), { addSuffix: true })}`
-                      )}
-                    </span>
-                  </div>
-                </div>
-              ))}
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Q&A history feature coming soon
+              </p>
             </CardContent>
           </Card>
         )}
