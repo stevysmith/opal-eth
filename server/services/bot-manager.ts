@@ -11,18 +11,22 @@ class BotManager {
 
   private async setupWebhook(bot: Telegraf<Context<Update>>, agentId: number) {
     try {
-      // Enable receiving updates
-      console.log(`Setting up webhook for bot ${agentId}`);
-      await bot.telegram.deleteWebhook();
-      await bot.telegram.setWebhook('');
-      console.log(`Webhook removed, starting polling for bot ${agentId}`);
+      console.log(`[Bot ${agentId}] Setting up bot updates...`);
 
-      // Use polling instead of webhooks for more reliable updates
+      // Clear any existing webhooks
+      await bot.telegram.deleteWebhook();
+      console.log(`[Bot ${agentId}] Existing webhooks cleared`);
+
+      // Start bot in polling mode
+      await bot.launch();
+      console.log(`[Bot ${agentId}] Bot launched in polling mode`);
+
+      // Add error handler
       bot.catch((err) => {
-        console.error(`Error in bot ${agentId}:`, err);
+        console.error(`[Bot ${agentId}] Bot error:`, err);
       });
     } catch (error) {
-      console.error(`Failed to setup updates for bot ${agentId}:`, error);
+      console.error(`[Bot ${agentId}] Failed to setup bot:`, error);
       throw error;
     }
   }
@@ -46,7 +50,7 @@ class BotManager {
 
       // Initialize bot if not exists
       if (!this.bots.has(agentId)) {
-        console.log(`Initializing bot ${agentId} for channel ${config.channelId}...`);
+        console.log(`[Bot ${agentId}] Initializing new bot for channel ${config.channelId}...`);
         const bot = new Telegraf(config.token);
 
         // Set up command handlers based on template
@@ -62,8 +66,14 @@ class BotManager {
             break;
         }
 
-        // Setup webhook and enable receiving updates
-        await this.setupWebhook(bot, agentId);
+        // Setup bot and start polling
+        try {
+          await this.setupWebhook(bot, agentId);
+          console.log(`[Bot ${agentId}] Bot setup completed`);
+        } catch (error) {
+          console.error(`[Bot ${agentId}] Failed to setup bot:`, error);
+          throw error;
+        }
 
         // Test channel connection with retries
         let retryCount = 0;
@@ -76,7 +86,7 @@ class BotManager {
               config.channelId,
               `🤖 Bot initialized successfully!\n\nTemplate: ${agent.template}\nName: ${agent.name}\n\nUse the following commands:\n${this.getCommandList(agent.template)}`
             );
-            console.log(`Bot ${agentId} successfully connected to channel ${config.channelId}`);
+            console.log(`[Bot ${agentId}] Successfully connected to channel ${config.channelId}`);
             messageSuccess = true;
 
             this.bots.set(agentId, bot);
@@ -84,7 +94,7 @@ class BotManager {
           } catch (error) {
             retryCount++;
             if (retryCount === maxRetries) {
-              console.error(`Failed to send test message to channel ${config.channelId}:`, error);
+              console.error(`[Bot ${agentId}] Failed to send test message to channel ${config.channelId}:`, error);
               throw new Error(
                 `Bot couldn't send messages to the channel after ${maxRetries} attempts. Make sure the bot is an admin in the channel and has permission to post messages.`
               );
@@ -96,7 +106,7 @@ class BotManager {
 
       return this.bots.has(agentId);
     } catch (error) {
-      console.error(`Error in initializeAgent for agent ${agentId}:`, error);
+      console.error(`[Bot ${agentId}] Error in initializeAgent:`, error);
       await this.stopAgent(agentId);
       throw error;
     }
