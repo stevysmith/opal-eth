@@ -234,10 +234,12 @@ class BotManager {
   }
 
   private setupPollCommands(bot: Telegraf<Context<Update>>, agentId: number) {
-    bot.command("poll", async (ctx) => {
+    // Handle both message and channel_post commands
+    const handlePollCommand = async (ctx: Context) => {
       try {
-        console.log(`[Bot ${agentId}] Processing poll command. Full message:`, ctx.message);
-        const message = ctx.message.text.substring(6).trim(); // Remove '/poll ' and trim
+        console.log(`[Bot ${agentId}] Processing poll command. Full message:`, ctx.message || ctx.channelPost);
+        const text = ctx.message?.text || ctx.channelPost?.text || '';
+        const message = text.substring(6).trim(); // Remove '/poll ' and trim
         console.log(`[Bot ${agentId}] Extracted message:`, message);
 
         // Find the question part (everything up to the first [)
@@ -339,11 +341,21 @@ class BotManager {
         console.error(`[Bot ${agentId}] Error creating poll:`, error);
         ctx.reply("Failed to create poll. Please try again.");
       }
+    };
+
+    // Register command handlers for both regular messages and channel posts
+    bot.command("poll", handlePollCommand);
+    bot.on('channel_post', (ctx, next) => {
+      if (ctx.channelPost?.text?.startsWith('/poll')) {
+        return handlePollCommand(ctx);
+      }
+      return next();
     });
 
-    bot.command("vote", async (ctx) => {
+    const handleVoteCommand = async (ctx: Context) => {
       try {
-        const [, pollId, optionNum] = ctx.message.text.split(" ");
+        const text = ctx.message?.text || ctx.channelPost?.text || '';
+        const [, pollId, optionNum] = text.split(" ");
         const option = parseInt(optionNum) - 1;
 
         const [poll] = await db
@@ -364,9 +376,14 @@ class BotManager {
           return ctx.reply("Invalid option number");
         }
 
+        const userId = (ctx.from?.id || ctx.channelPost?.sender_chat?.id)?.toString();
+        if (!userId) {
+          return ctx.reply("Could not identify voter");
+        }
+
         await db.insert(votes).values({
           pollId: poll.id,
-          userId: ctx.from.id.toString(),
+          userId,
           selectedOption: option,
         });
 
@@ -375,6 +392,14 @@ class BotManager {
         console.error("Error recording vote:", error);
         ctx.reply("Failed to record vote. Please try again.");
       }
+    };
+
+    bot.command("vote", handleVoteCommand);
+    bot.on('channel_post', (ctx, next) => {
+      if (ctx.channelPost?.text?.startsWith('/vote')) {
+        return handleVoteCommand(ctx);
+      }
+      return next();
     });
   }
 
