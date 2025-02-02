@@ -99,7 +99,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Update the GET /api/agents endpoint to properly check active polls
+  // Update the GET /api/agents endpoint to check actual running state
   app.get("/api/agents", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
 
@@ -136,12 +136,23 @@ export function registerRoutes(app: Express): Server {
               )
           : [];
 
-        // Update agent's active status based on active polls/giveaways
+        // Check if the bot is actually running
+        const isRunning = botManager.isAgentRunning(agent.id);
         const hasActivePollsOrGiveaways = activePolls.length > 0 || activeGiveaways.length > 0;
-        if (hasActivePollsOrGiveaways !== agent.active) {
+        const shouldBeActive = hasActivePollsOrGiveaways || isRunning;
+
+        // Update agent's active status if it doesn't match reality
+        if (shouldBeActive !== agent.active) {
+          console.log(`Updating agent ${agent.id} active status to match reality:`, {
+            current: agent.active,
+            shouldBe: shouldBeActive,
+            isRunning,
+            hasActivePollsOrGiveaways
+          });
+
           const [updatedAgent] = await db
             .update(agents)
-            .set({ active: hasActivePollsOrGiveaways })
+            .set({ active: shouldBeActive })
             .where(eq(agents.id, agent.id))
             .returning();
 

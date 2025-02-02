@@ -32,13 +32,19 @@ class BotManager {
         // Remove bot from the map
         this.bots.delete(agentId);
         console.log(`[Bot ${agentId}] Cleanup completed`);
+        return true;
       } catch (error) {
         console.error(`[Bot ${agentId}] Error stopping bot:`, error);
         throw error;
       }
     } else {
       console.log(`[Bot ${agentId}] No active bot found to stop`);
+      return false;
     }
+  }
+
+  isAgentRunning(agentId: number): boolean {
+    return this.bots.has(agentId);
   }
 
   private async initializeBotInstance(agentId: number, token: string, channelId: string) {
