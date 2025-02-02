@@ -577,106 +577,109 @@ class BotManager {
     };
 
     const handleEnterCommand = async (ctx: Context) => {
-      try {
-        const text = ctx.message?.text || ctx.channelPost?.text || '';
-        console.log(`[Bot ${agentId}] Processing enter command. Full message:`, {
-          text,
-          messageFrom: ctx.message?.from,
-          channelPost: ctx.channelPost,
-          chat: ctx.chat,
-          from: ctx.from
-        });
+          try {
+            const text = ctx.message?.text || ctx.channelPost?.text || '';
+            console.log(`[Bot ${agentId}] Processing enter command. Full message:`, {
+              text,
+              messageFrom: ctx.message?.from,
+              channelPost: ctx.channelPost,
+              chat: ctx.chat,
+              from: ctx.from
+            });
 
-        // If this is a channel post, instruct to send DM
-        if (ctx.channelPost) {
-          const me = await bot.telegram.getMe();
-          return bot.telegram.sendMessage(
-            ctx.chat!.id,
-            '🎫 To enter the giveaway, please follow these steps:\n\n' +
-            `1. Click this link to open chat: @${me.username}\n` +
-            `2. Send the command: /enter <giveaway-id> <your-wallet-address>\n\n` +
-            'Example: /enter 123 0x742d35Cc6634C0532925a3b844Bc454e4438f44e\n\n' +
-            'This ensures we can properly link your entry to your wallet address for prize distribution.'
-          );
-        }
+            // If this is a channel post, instruct to send DM
+            if (ctx.channelPost) {
+              const me = await bot.telegram.getMe();
+              return bot.telegram.sendMessage(
+                ctx.chat!.id,
+                '🎫 To enter the giveaway, please follow these steps:\n\n' +
+                `1. Click this link to open chat: @${me.username}\n` +
+                `2. Send the command: /enter <giveaway-id> <your-wallet-address>\n\n` +
+                'Example: /enter 123 0x742d35Cc6634C0532925a3b844Bc454e4438f44e\n\n' +
+                'This ensures we can properly link your entry to your wallet address for prize distribution.'
+              );
+            }
 
-        const parts = text.split(' ');
-        if (parts.length !== 3) {
-          return ctx.reply(
-            "Please provide both the giveaway ID and your wallet address.\n" +
-            "Format: /enter <giveaway-id> <wallet-address>\n" +
-            "Example: /enter 123 0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
-          );
-        }
+            const parts = text.split(' ');
+            if (parts.length !== 3) {
+              console.log(`[Bot ${agentId}] Invalid command format. Parts:`, parts);
+              return ctx.reply(
+                "Please provide both the giveaway ID and your wallet address.\n" +
+                "Format: /enter <giveaway-id> <wallet-address>\n" +
+                "Example: /enter 123 0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
+              );
+            }
 
-        const [, giveawayIdStr, walletAddress] = parts;
-        const giveawayId = parseInt(giveawayIdStr);
+            const [, giveawayIdStr, walletAddress] = parts;
+            const giveawayId = parseInt(giveawayIdStr);
 
-        console.log(`[Bot ${agentId}] Parsed entry:`, { giveawayId, walletAddress });
+            console.log(`[Bot ${agentId}] Parsed entry:`, { giveawayId, walletAddress });
 
-        if (isNaN(giveawayId)) {
-          return ctx.reply("Please provide a valid giveaway ID. Example: /enter 123 0x742d35Cc6634C0532925a3b844Bc454e4438f44e");
-        }
+            if (isNaN(giveawayId)) {
+              return ctx.reply("Please provide a valid giveaway ID. Example: /enter 123 0x742d35Cc6634C0532925a3b844Bc454e4438f44e");
+            }
 
-        if (!validateWalletAddress(walletAddress)) {
-          return ctx.reply(
-            "❌ Invalid wallet address format. Please provide a valid Ethereum wallet address.\n" +
-            "It should start with '0x' followed by 40 hexadecimal characters."
-          );
-        }
+            if (!validateWalletAddress(walletAddress)) {
+              return ctx.reply(
+                "❌ Invalid wallet address format. Please provide a valid Ethereum wallet address.\n" +
+                "It should start with '0x' followed by 40 hexadecimal characters."
+              );
+            }
 
-        const [giveaway] = await db
-          .select()
-          .from(giveaways)
-          .where(eq(giveaways.id, giveawayId))
-          .limit(1);
+            const [giveaway] = await db
+              .select()
+              .from(giveaways)
+              .where(eq(giveaways.id, giveawayId))
+              .limit(1);
 
-        if (!giveaway) {
-          return ctx.reply("Giveaway not found");
-        }
+            console.log(`[Bot ${agentId}] Found giveaway:`, giveaway);
 
-        if (new Date() > giveaway.endTime) {
-          return ctx.reply("This giveaway has ended");
-        }
+            if (!giveaway) {
+              return ctx.reply("Giveaway not found");
+            }
 
-        // For direct messages, we can reliably get the user's Telegram ID
-        if (!ctx.from?.id) {
-          return ctx.reply("Could not identify you. Please make sure you're sending this command directly to the bot.");
-        }
+            if (new Date() > giveaway.endTime) {
+              return ctx.reply("This giveaway has ended");
+            }
 
-        const userId = ctx.from.id.toString();
+            // For direct messages, we can reliably get the user's Telegram ID
+            if (!ctx.from?.id) {
+              return ctx.reply("Could not identify you. Please make sure you're sending this command directly to the bot.");
+            }
 
-        // Check if user already entered
-        const [existingEntry] = await db
-          .select()
-          .from(giveawayEntries)
-          .where(and(
-            eq(giveawayEntries.giveawayId, giveaway.id),
-            eq(giveawayEntries.userId, userId)
-          ))
-          .limit(1);
+            const userId = ctx.from.id.toString();
 
-        if (existingEntry) {
-          console.log(`[Bot ${agentId}] User ${userId} already entered giveaway ${giveawayId}`);
-          return ctx.reply("You've already entered this giveaway!");
-        }
+            // Check if user already entered
+            const [existingEntry] = await db
+              .select()
+              .from(giveawayEntries)
+              .where(and(
+                eq(giveawayEntries.giveawayId, giveaway.id),
+                eq(giveawayEntries.userId, userId)
+              ))
+              .limit(1);
 
-        await db.insert(giveawayEntries).values({
-          giveawayId: giveaway.id,
-          userId,
-          walletAddress,
-        });
+            if (existingEntry) {
+              console.log(`[Bot ${agentId}] User ${userId} already entered giveaway ${giveawayId}`);
+              return ctx.reply("You've already entered this giveaway!");
+            }
 
-        console.log(`[Bot ${agentId}] User ${userId} successfully entered giveaway ${giveawayId}`);
-        ctx.reply(
-          "🎫 You've been entered into the giveaway! Good luck!\n\n" +
-          `Your wallet address ${walletAddress} has been registered for the prize distribution.`
-        );
-      } catch (error) {
-        console.error(`[Bot ${agentId}] Error handling enter command:`, error);
-        ctx.reply("Failed to enter giveaway. Please try again.");
-      }
-    };
+            await db.insert(giveawayEntries).values({
+              giveawayId: giveaway.id,
+              userId,
+              walletAddress,
+            });
+
+            console.log(`[Bot ${agentId}] User ${userId} successfully entered giveaway ${giveawayId}`);
+            ctx.reply(
+              "🎫 You've been entered into the giveaway! Good luck!\n\n" +
+              `Your wallet address ${walletAddress} has been registered for the prize distribution.`
+            );
+          } catch (error) {
+            console.error(`[Bot ${agentId}] Error handling enter command:`, error);
+            ctx.reply("Failed to enter giveaway. Please try again.");
+          }
+        };
 
     // Register command handlers for both regular messages and channel posts
     bot.command("giveaway", handleGiveawayCommand);
