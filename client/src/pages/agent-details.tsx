@@ -10,6 +10,9 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, MessageSquare, Award, BarChart3 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/use-auth";
+import { Link } from "wouter";
+
 
 interface Poll {
   id: number;
@@ -192,6 +195,7 @@ interface AgentDetailsPageProps {
 
 export default function AgentDetailsPage({ id }: AgentDetailsPageProps) {
   const agentId = parseInt(id);
+  const { user } = useAuth();
 
   console.log("AgentDetailsPage: Initialized with agentId:", agentId);
 
@@ -199,8 +203,8 @@ export default function AgentDetailsPage({ id }: AgentDetailsPageProps) {
     queryKey: [`/api/agents/${agentId}`],
     enabled: !isNaN(agentId),
     retry: 1,
-    staleTime: 0, // Always fetch fresh data
-    refetchInterval: 10000, // Refetch every 10 seconds to keep giveaway status updated
+    staleTime: 0,
+    refetchInterval: 10000,
     queryFn: async () => {
       if (isNaN(agentId)) throw new Error("Invalid agent ID");
 
@@ -275,6 +279,24 @@ export default function AgentDetailsPage({ id }: AgentDetailsPageProps) {
                 Tone: {agent.persona.tone}
               </p>
             </div>
+            {agent.template === "giveaway" && user?.walletAddress && (
+              <div>
+                <h3 className="font-semibold mb-2">Wallet Configuration</h3>
+                <p className="text-sm text-muted-foreground">
+                  Connected Wallet: {user.walletAddress}
+                </p>
+              </div>
+            )}
+            {agent.template === "giveaway" && !user?.walletAddress && (
+              <div className="rounded-md bg-yellow-50 p-4">
+                <p className="text-sm text-yellow-800">
+                  Please add a wallet address in your profile to manage giveaway rewards.{" "}
+                  <Link href="/profile" className="font-medium underline">
+                    Update Profile
+                  </Link>
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
