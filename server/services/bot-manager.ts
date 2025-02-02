@@ -1,9 +1,10 @@
 import { Telegraf, Context } from "telegraf";
 import { Update } from "telegraf/typings/core/types/typegram";
 import { db } from "@db";
-import { agents, polls, votes, giveaways, giveawayEntries } from "@db/schema";
+import { agents, polls, votes, giveaways, giveawayEntries, users } from "@db/schema";
 import { eq, and } from "drizzle-orm";
 import schedule from "node-schedule";
+import coinbaseService from './coinbase/agentKit';
 
 class BotManager {
   private bots: Map<number, Telegraf<Context<Update>>> = new Map();
@@ -488,15 +489,49 @@ class BotManager {
             // Pick random winner
             const winner = entries[Math.floor(Math.random() * entries.length)];
 
+            // Get winner's wallet address
+            const [winnerUser] = await db
+              .select()
+              .from(users)
+              .where(eq(users.id, parseInt(winner.userId)))
+              .limit(1);
+
             await db
               .update(giveaways)
               .set({ winnerId: winner.userId })
               .where(eq(giveaways.id, giveaway.id));
 
+            // If winner has a wallet address, attempt USDC payout
+            let payoutMessage = '';
+            if (winnerUser?.walletAddress) {
+              try {
+                // Get or create MPC wallet for the agent
+                let walletId = await coinbaseService.getWalletForAgent(agentId);
+                if (!walletId) {
+                  walletId = await coinbaseService.createMpcWallet(agentId);
+                }
+
+                // Send USDC to winner
+                const amount = '10'; // Default amount, can be made configurable
+                const txId = await coinbaseService.sendUsdc(
+                  walletId,
+                  winnerUser.walletAddress,
+                  amount
+                );
+                payoutMessage = `\n💰 USDC payout sent! Transaction ID: ${txId}`;
+              } catch (error) {
+                console.error('Failed to send USDC payout:', error);
+                payoutMessage = '\n⚠️ USDC payout failed. Winner will be contacted manually.';
+              }
+            } else {
+              payoutMessage = '\n📝 Winner needs to set up their wallet address to receive USDC.';
+            }
+
             await ctx.reply(
               `🎉 Giveaway Ended!\n\n` +
               `Prize: ${prize}\n` +
-              `Winner: @${winner.userId}\n\n` +
+              `Winner: @${winner.userId}\n` +
+              `${payoutMessage}\n\n` +
               `Congratulations!`
             );
           } catch (error) {

@@ -7,6 +7,14 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").unique().notNull(),
   password: text("password").notNull(),
+  walletAddress: text("wallet_address"),  // Added for USDC payouts
+});
+
+export const mpcWallets = pgTable("mpc_wallets", {
+  id: serial("id").primaryKey(),
+  agentId: integer("agent_id").notNull().references(() => agents.id),
+  walletId: text("wallet_id").notNull(),
+  createdAt: timestamp("created_at").notNull().default(new Date()),
 });
 
 // Define the platform config schema
@@ -88,6 +96,10 @@ export const agentRelations = relations(agents, ({ one, many }) => ({
   }),
   polls: many(polls),
   giveaways: many(giveaways),
+  mpcWallet: one(mpcWallets, {
+    fields: [agents.id],
+    references: [mpcWallets.agentId],
+  }),
 }));
 
 export const pollRelations = relations(polls, ({ one, many }) => ({
