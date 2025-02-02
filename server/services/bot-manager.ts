@@ -56,31 +56,46 @@ class BotManager {
       const me = await bot.telegram.getMe();
       console.log(`[Bot ${agentId}] Bot info:`, me);
 
-      // Test channel access immediately after bot creation
-      console.log(`[Bot ${agentId}] Testing channel access for ${channelId}...`);
+      // Format channelId appropriately
+      const formattedChannelId = channelId.startsWith('@') ? channelId : `@${channelId}`;
+      console.log(`[Bot ${agentId}] Testing channel access for ${formattedChannelId}...`);
+
       try {
-        const chat = await bot.telegram.getChat(channelId);
+        // First try with the @ format
+        const chat = await bot.telegram.getChat(formattedChannelId);
         console.log(`[Bot ${agentId}] Successfully accessed channel:`, {
           id: chat.id,
           type: chat.type,
           title: 'title' in chat ? chat.title : undefined
         });
-      } catch (error) {
-        console.error(`[Bot ${agentId}] Failed to access channel:`, error);
-        throw new Error(
-          `Cannot access channel ${channelId}. Error: ${error.message}\n` +
-          'Please ensure:\n' +
-          '1. The channel ID is correct\n' +
-          '2. The bot is added to the channel\n' +
-          '3. The bot is an administrator in the channel'
-        );
+        return { bot, channelId: formattedChannelId };
+      } catch (firstError) {
+        console.log(`[Bot ${agentId}] Failed with @ format, trying numeric ID...`);
+        try {
+          // If @ format fails, try numeric ID
+          const numericId = channelId.replace('@', '');
+          const chat = await bot.telegram.getChat(numericId);
+          console.log(`[Bot ${agentId}] Successfully accessed channel with numeric ID:`, {
+            id: chat.id,
+            type: chat.type,
+            title: 'title' in chat ? chat.title : undefined
+          });
+          return { bot, channelId: numericId };
+        } catch (secondError) {
+          console.error(`[Bot ${agentId}] All channel access attempts failed:`, { firstError, secondError });
+          throw new Error(
+            `Cannot access channel ${channelId}. Error: ${firstError.message}\n` +
+            'Please ensure:\n' +
+            '1. The channel ID/username is correct\n' +
+            '2. The bot is added to the channel\n' +
+            '3. The bot is an administrator in the channel'
+          );
+        }
       }
     } catch (error) {
       console.error(`[Bot ${agentId}] Failed to get bot info:`, error);
       throw new Error(`Failed to connect to Telegram: ${error.message}`);
     }
-
-    return bot;
   }
 
   async initializeAgent(agentId: number) {
@@ -109,7 +124,11 @@ class BotManager {
       }
 
       // Initialize bot with more detailed error handling
-      const bot = await this.initializeBotInstance(agentId, config.token, config.channelId);
+      const { bot, channelId: formattedChannelId } = await this.initializeBotInstance(
+        agentId,
+        config.token,
+        config.channelId
+      );
 
       // Set up commands
       console.log(`[Bot ${agentId}] Setting up command handlers...`);
@@ -153,7 +172,7 @@ class BotManager {
             break;
           } catch (error) {
             console.error(`[Bot ${agentId}] Launch attempt ${attempt} failed:`, error);
-            if (error.message.includes('409: Conflict')) {
+            if (error.message?.includes('409: Conflict')) {
               console.log(`[Bot ${agentId}] Conflict detected, retrying after delay...`);
               await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
               continue;
@@ -168,16 +187,16 @@ class BotManager {
 
       // Test channel connection with detailed error handling
       try {
-        console.log(`[Bot ${agentId}] Testing channel connection (${config.channelId})...`);
+        console.log(`[Bot ${agentId}] Testing channel connection (${formattedChannelId})...`);
         const message = await bot.telegram.sendMessage(
-          config.channelId,
+          formattedChannelId,
           `🤖 Bot restarted and ready!\n\nTemplate: ${agent.template}\nName: ${agent.name}\n\nUse the following commands:\n${this.getCommandList(agent.template)}`
         );
         console.log(`[Bot ${agentId}] Test message sent successfully:`, message);
       } catch (error) {
         console.error(`[Bot ${agentId}] Failed to send test message:`, error);
         throw new Error(
-          `Failed to send message to channel ${config.channelId}. ` +
+          `Failed to send message to channel ${formattedChannelId}. ` +
           `Error: ${error.message}\n` +
           'Please ensure:\n' +
           '1. The channel ID is correct\n' +
