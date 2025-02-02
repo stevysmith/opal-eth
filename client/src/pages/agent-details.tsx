@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   Card,
   CardContent,
@@ -7,12 +7,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, MessageSquare, Award, BarChart3 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, MessageSquare, Award, BarChart3, Wallet } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { Link } from "wouter";
-
+import { useToast } from "@/hooks/use-toast";
 
 interface Poll {
   id: number;
@@ -189,6 +190,56 @@ function GiveawayDetails({ giveaways }: { giveaways: Giveaway[] }) {
   );
 }
 
+function WalletBalance({ agentId }: { agentId: number }) {
+  const { toast } = useToast();
+  const { data: balance, isLoading, refetch } = useQuery({
+    queryKey: [`/api/agents/${agentId}/balance`],
+    queryFn: async () => {
+      const response = await apiRequest("GET", `/api/agents/${agentId}/balance`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch balance");
+      }
+      const data = await response.json();
+      return data.balance;
+    },
+    enabled: false, // Don't fetch automatically
+  });
+
+  const checkBalance = () => {
+    refetch().catch(error => {
+      toast({
+        title: "Error checking balance",
+        description: error.message,
+        variant: "destructive",
+      });
+    });
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-sm text-muted-foreground">USDC Balance</span>
+        <div className="flex items-center gap-2">
+          {isLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <span className="font-medium">{balance ? `${balance} USDC` : '-- USDC'}</span>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={checkBalance}
+            disabled={isLoading}
+          >
+            <Wallet className="h-4 w-4 mr-2" />
+            Check Balance
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface AgentDetailsPageProps {
   id: string;
 }
@@ -279,22 +330,28 @@ export default function AgentDetailsPage({ id }: AgentDetailsPageProps) {
                 Tone: {agent.persona.tone}
               </p>
             </div>
-            {agent.template === "giveaway" && user?.walletAddress && (
-              <div>
-                <h3 className="font-semibold mb-2">Wallet Configuration</h3>
-                <p className="text-sm text-muted-foreground">
-                  Connected Wallet: {user.walletAddress}
-                </p>
-              </div>
-            )}
-            {agent.template === "giveaway" && !user?.walletAddress && (
-              <div className="rounded-md bg-yellow-50 p-4">
-                <p className="text-sm text-yellow-800">
-                  Please add a wallet address in your profile to manage giveaway rewards.{" "}
-                  <Link href="/profile" className="font-medium underline">
-                    Update Profile
-                  </Link>
-                </p>
+            {agent.template === "giveaway" && (
+              <div className="space-y-4">
+                {user?.walletAddress ? (
+                  <>
+                    <div>
+                      <h3 className="font-semibold mb-2">Wallet Configuration</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Connected Wallet: {user.walletAddress}
+                      </p>
+                    </div>
+                    <WalletBalance agentId={agent.id} />
+                  </>
+                ) : (
+                  <div className="rounded-md bg-yellow-50 p-4">
+                    <p className="text-sm text-yellow-800">
+                      Please add a wallet address in your profile to manage giveaway rewards.{" "}
+                      <Link href="/profile" className="font-medium underline">
+                        Update Profile
+                      </Link>
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>

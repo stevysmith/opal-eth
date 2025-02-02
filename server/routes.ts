@@ -5,6 +5,7 @@ import { db } from "@db";
 import { agents, polls, giveaways, type SelectAgent, type PlatformConfig, votes, giveawayEntries } from "@db/schema";
 import { eq, and, gt, desc } from "drizzle-orm";
 import { botManager } from "./services/bot-manager";
+import { giveawayPayoutService } from "./src/services/giveawayPayoutService";
 
 export function registerRoutes(app: Express): Server {
   setupAuth(app);
@@ -374,6 +375,45 @@ export function registerRoutes(app: Express): Server {
       });
     }
   });
+    // Add balance endpoint for giveaway agents
+  app.get("/api/agents/:id/balance", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.sendStatus(401);
+    }
+
+    try {
+      const agentId = parseInt(req.params.id);
+
+      // Verify agent exists and belongs to user
+      const [agent] = await db
+        .select()
+        .from(agents)
+        .where(and(
+          eq(agents.id, agentId),
+          eq(agents.userId, req.user.id)
+        ))
+        .limit(1);
+
+      if (!agent) {
+        return res.status(404).json({ error: "Agent not found" });
+      }
+
+      if (agent.template !== "giveaway") {
+        return res.status(400).json({ error: "Balance check only available for giveaway agents" });
+      }
+
+      // Get balance using giveaway service
+      const balance = await giveawayPayoutService.getGiveawayBalance(agentId);
+      res.json({ balance });
+    } catch (error) {
+      console.error("Error checking balance:", error);
+      res.status(500).json({ 
+        error: "Failed to check balance",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
 
   // Clean up bots when server shuts down
   process.on('SIGTERM', async () => {
