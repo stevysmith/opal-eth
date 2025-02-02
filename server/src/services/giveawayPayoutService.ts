@@ -67,8 +67,11 @@ export class GiveawayPayoutService {
   }
 
   async getGiveawayBalance(agentId: number): Promise<string> {
-    const paymentService = await createUSDCPaymentService(agentId);
-    return paymentService.getBalance();
+    let walletId = await coinbaseService.getWalletForAgent(agentId);
+    if (!walletId) {
+      walletId = await coinbaseService.createMpcWallet(agentId);
+    }
+    return coinbaseService.getWalletBalance(walletId);
   }
 }
 
