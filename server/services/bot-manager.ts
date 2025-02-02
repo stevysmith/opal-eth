@@ -18,11 +18,13 @@ class BotManager {
         console.log(`[Bot ${agentId}] Bot stopped successfully`);
         // Remove all jobs associated with this agent
         for (const [jobId, job] of this.jobs.entries()) {
-          job.cancel();
-          this.jobs.delete(jobId);
+          if (jobId === agentId) {
+            job.cancel();
+            this.jobs.delete(jobId);
+          }
         }
         // Wait a bit after stopping to ensure cleanup
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 2000));
       } catch (error) {
         console.error(`[Bot ${agentId}] Error stopping bot:`, error);
       }
@@ -100,8 +102,11 @@ class BotManager {
 
   async initializeAgent(agentId: number) {
     try {
-      // Stop any existing bot first
+      // Stop any existing bot first and wait for cleanup
+      console.log(`[Bot ${agentId}] Stopping existing bot instance if any...`);
       await this.stopAgent(agentId);
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for cleanup
+
       console.log(`[Bot ${agentId}] Initializing new agent...`);
 
       const [agent] = await db
@@ -161,31 +166,31 @@ class BotManager {
         ctx.reply("Sorry, something went wrong. Please try again later.");
       });
 
-      // Start bot with retries and detailed error logging
+      // Start bot in polling mode with better error handling and backoff
       console.log(`[Bot ${agentId}] Starting bot in polling mode...`);
-      try {
-        for (let attempt = 1; attempt <= 3; attempt++) {
-          try {
-            console.log(`[Bot ${agentId}] Launch attempt ${attempt}`);
-            await bot.launch();
-            console.log(`[Bot ${agentId}] Bot launched successfully`);
-            break;
-          } catch (error) {
-            console.error(`[Bot ${agentId}] Launch attempt ${attempt} failed:`, error);
-            if (error.message?.includes('409: Conflict')) {
-              console.log(`[Bot ${agentId}] Conflict detected, retrying after delay...`);
-              await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
-              continue;
-            }
-            throw error;
+      let started = false;
+      for (let attempt = 1; attempt <= 3 && !started; attempt++) {
+        try {
+          console.log(`[Bot ${agentId}] Launch attempt ${attempt}`);
+          await bot.launch();
+          console.log(`[Bot ${agentId}] Bot launched successfully`);
+          started = true;
+        } catch (error) {
+          console.error(`[Bot ${agentId}] Launch attempt ${attempt} failed:`, error);
+          if (error.message?.includes('409: Conflict')) {
+            console.log(`[Bot ${agentId}] Conflict detected, waiting longer...`);
+            await new Promise(resolve => setTimeout(resolve, 3000 * attempt));
+            continue;
           }
+          throw error;
         }
-      } catch (error) {
-        console.error(`[Bot ${agentId}] All launch attempts failed:`, error);
-        throw error;
       }
 
-      // Test channel connection with detailed error handling
+      if (!started) {
+        throw new Error("Failed to start bot after multiple attempts");
+      }
+
+      // Test channel connection
       try {
         console.log(`[Bot ${agentId}] Testing channel connection (${formattedChannelId})...`);
         const message = await bot.telegram.sendMessage(
@@ -196,7 +201,7 @@ class BotManager {
       } catch (error) {
         console.error(`[Bot ${agentId}] Failed to send test message:`, error);
         throw new Error(
-          `Failed to send message to channel ${formattedChannelId}. ` +
+          `Failed to send message to channel ${formattedChannelId}.\n` +
           `Error: ${error.message}\n` +
           'Please ensure:\n' +
           '1. The channel ID is correct\n' +
@@ -531,14 +536,16 @@ class BotManager {
   }
 
   async stopAll() {
-    for (const [agentId] of Array.from(this.bots.entries())) {
+    console.log('Stopping all bots...');
+    for (const [agentId] of this.bots.entries()) {
       await this.stopAgent(agentId);
     }
 
-    for (const job of Array.from(this.jobs.values())) {
+    for (const job of this.jobs.values()) {
       job.cancel();
     }
     this.jobs.clear();
+    console.log('All bots stopped successfully');
   }
 }
 
