@@ -5,8 +5,6 @@ import { agents, polls, votes, giveaways, giveawayEntries } from "@db/schema";
 import { eq } from "drizzle-orm";
 import schedule from "node-schedule";
 
-const INIT_TIMEOUT = 15000; // Reduce timeout to 15 seconds for bot initialization
-
 class BotManager {
   private bots: Map<number, Telegraf<Context<Update>>> = new Map();
   private jobs: Map<number, schedule.Job> = new Map();
@@ -49,31 +47,34 @@ class BotManager {
         // Test channel connection with retries
         let retryCount = 0;
         const maxRetries = 3;
+        let messageSuccess = false;
 
-        while (retryCount < maxRetries) {
+        while (retryCount < maxRetries && !messageSuccess) {
           try {
             await bot.telegram.sendMessage(
               config.channelId,
               `🤖 Bot initialized successfully!\n\nTemplate: ${agent.template}\nName: ${agent.name}\n\nUse the following commands:\n${this.getCommandList(agent.template)}`
             );
             console.log(`Bot ${agentId} successfully connected to channel ${config.channelId}`);
+            messageSuccess = true;
 
-            // Launch bot with timeout
+            // Try to launch the bot, but don't fail if it times out as long as messages work
             try {
               await Promise.race([
                 bot.launch(),
-                new Promise((_, reject) => 
-                  setTimeout(() => reject(new Error("Bot launch timed out")), INIT_TIMEOUT)
-                )
+                new Promise((_, reject) => setTimeout(() => reject(new Error("Launch timeout")), 5000))
               ]);
-
-              this.bots.set(agentId, bot);
-              return true;
             } catch (error) {
-              console.error(`Failed to launch bot ${agentId}:`, error);
-              bot.stop();
-              throw error;
+              // Only log the launch timeout, don't throw
+              if (error.message === "Launch timeout") {
+                console.log(`Bot ${agentId} launch timed out, but messages are working`);
+              } else {
+                throw error;
+              }
             }
+
+            this.bots.set(agentId, bot);
+            return true;
           } catch (error) {
             retryCount++;
             if (retryCount === maxRetries) {
@@ -82,7 +83,6 @@ class BotManager {
                 `Bot couldn't send messages to the channel after ${maxRetries} attempts. Make sure the bot is an admin in the channel and has permission to post messages.`
               );
             }
-            // Wait 2 seconds before retrying
             await new Promise(resolve => setTimeout(resolve, 2000));
           }
         }
@@ -91,7 +91,6 @@ class BotManager {
       return this.bots.has(agentId);
     } catch (error) {
       console.error(`Error in initializeAgent for agent ${agentId}:`, error);
-      // Ensure bot is cleaned up on initialization failure
       await this.stopAgent(agentId);
       throw error;
     }
