@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { useParams } from "wouter";
 import {
   Card,
   CardContent,
@@ -185,19 +184,22 @@ function GiveawayDetails({ giveaways }: { giveaways: Giveaway[] }) {
   );
 }
 
-export default function AgentDetailsPage() {
-  const params = useParams<{ id: string }>();
-  const agentId = params.id ? parseInt(params.id) : undefined;
+interface AgentDetailsPageProps {
+  id: string;
+}
+
+export default function AgentDetailsPage({ id }: AgentDetailsPageProps) {
+  const agentId = parseInt(id);
 
   console.log("AgentDetailsPage: Initialized with agentId:", agentId);
 
   const { data: agent, isLoading, error } = useQuery<EnrichedAgent>({
     queryKey: [`/api/agents/${agentId}`],
-    enabled: !!agentId,
+    enabled: !isNaN(agentId),
     retry: 1,
     staleTime: 0,
     queryFn: async () => {
-      if (!agentId) throw new Error("No agent ID provided");
+      if (isNaN(agentId)) throw new Error("Invalid agent ID");
 
       console.log("AgentDetailsPage: Fetching data for agent:", agentId);
       const response = await apiRequest("GET", `/api/agents/${agentId}`);

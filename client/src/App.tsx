@@ -17,7 +17,9 @@ function Router() {
       <ProtectedRoute path="/" component={HomePage} />
       <ProtectedRoute path="/wizard" component={WizardPage} />
       <ProtectedRoute path="/wizard/*" component={WizardPage} />
-      <ProtectedRoute path="/agents/:id" component={AgentDetailsPage} />
+      <Route path="/agents/:id">
+        {params => <AgentDetailsPage id={params.id} />}
+      </Route>
       <Route component={NotFound} />
     </Switch>
   );
