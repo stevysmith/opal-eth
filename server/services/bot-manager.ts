@@ -9,28 +9,6 @@ class BotManager {
   private bots: Map<number, Telegraf<Context<Update>>> = new Map();
   private jobs: Map<number, schedule.Job> = new Map();
 
-  private async setupWebhook(bot: Telegraf<Context<Update>>, agentId: number) {
-    try {
-      console.log(`[Bot ${agentId}] Setting up bot updates...`);
-
-      // Clear any existing webhooks
-      await bot.telegram.deleteWebhook();
-      console.log(`[Bot ${agentId}] Existing webhooks cleared`);
-
-      // Start bot in polling mode
-      await bot.launch();
-      console.log(`[Bot ${agentId}] Bot launched in polling mode`);
-
-      // Add error handler
-      bot.catch((err) => {
-        console.error(`[Bot ${agentId}] Bot error:`, err);
-      });
-    } catch (error) {
-      console.error(`[Bot ${agentId}] Failed to setup bot:`, error);
-      throw error;
-    }
-  }
-
   async initializeAgent(agentId: number) {
     try {
       const [agent] = await db
@@ -55,9 +33,24 @@ class BotManager {
       // Initialize new bot
       const bot = new Telegraf(config.token);
 
-      // Add global error handler
-      bot.catch((error) => {
-        console.error(`[Bot ${agentId}] Unhandled bot error:`, error);
+      // Add middleware for logging all updates
+      bot.use(async (ctx, next) => {
+        console.log(`[Bot ${agentId}] Received update:`, {
+          type: ctx.updateType,
+          message: ctx.message,
+          from: ctx.from,
+        });
+        await next();
+      });
+
+      // Set up basic commands first
+      bot.command("start", (ctx) => {
+        console.log(`[Bot ${agentId}] Start command received from:`, ctx.from);
+        ctx.reply(`👋 Welcome! I'm a ${agent.template} bot.\n\nAvailable commands:\n${this.getCommandList(agent.template)}`);
+      });
+
+      bot.command("help", (ctx) => {
+        ctx.reply(`Available commands:\n${this.getCommandList(agent.template)}`);
       });
 
       // Set up command handlers based on template
@@ -73,13 +66,21 @@ class BotManager {
           break;
       }
 
-      // Enable debug mode
-      bot.use(Telegraf.log());
+      // Add error handler for unhandled errors
+      bot.catch((error, ctx) => {
+        console.error(`[Bot ${agentId}] Unhandled error:`, error);
+        ctx.reply("Sorry, something went wrong. Please try again later.");
+      });
 
       // Start bot in polling mode
       console.log(`[Bot ${agentId}] Starting bot in polling mode...`);
-      await bot.launch();
-      console.log(`[Bot ${agentId}] Bot launched successfully`);
+      try {
+        await bot.launch();
+        console.log(`[Bot ${agentId}] Bot launched successfully`);
+      } catch (error) {
+        console.error(`[Bot ${agentId}] Failed to launch bot:`, error);
+        throw error;
+      }
 
       // Test channel connection
       try {
@@ -257,14 +258,12 @@ class BotManager {
         console.log(`[Bot ${agentId}] Created giveaway:`, giveaway);
 
         // Send confirmation message
-        const response = await ctx.reply(
+        await ctx.reply(
           `🎉 New Giveaway!\n\n` +
           `Prize: ${prize}\n` +
           `Duration: ${durationHours < 1 ? `${Math.round(durationHours * 60)} minutes` : `${durationHours} hours`}\n\n` +
           `Type /enter ${giveaway.id} to participate!`
         );
-
-        console.log(`[Bot ${agentId}] Sent giveaway announcement:`, response);
 
         // Schedule end of giveaway
         this.jobs.set(giveaway.id, schedule.scheduleJob(endTime, async () => {
@@ -359,7 +358,7 @@ class BotManager {
     bot.on("message", (ctx) => {
       console.log(`[Bot ${agentId}] Received message:`, {
         from: ctx.from?.id,
-        text: ctx.message?.text,
+        text: ctx.message,
         type: ctx.updateType
       });
     });
