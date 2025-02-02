@@ -1,8 +1,8 @@
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { Link, useLocation } from "wouter";
-import { Plus, MessageSquare, Award, BarChart3, Loader2, ArrowRight } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
+import { Plus, MessageSquare, Award, BarChart3, Loader2 } from "lucide-react";
 import type { SelectAgent } from "@db/schema";
 import {
   Card,
@@ -13,10 +13,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
-import { formatDistanceToNow } from "date-fns";
 
 export default function HomePage() {
   const { user, logoutMutation } = useAuth();
@@ -26,12 +25,6 @@ export default function HomePage() {
     retry: false
   });
   const [pendingAgents, setPendingAgents] = useState<Set<number>>(new Set());
-  const [, navigate] = useLocation();
-
-  const handleViewDetails = (agentId: number) => {
-    queryClient.removeQueries({ queryKey: ["/api/agents", agentId] });
-    navigate(`/agents/${agentId}`);
-  };
 
   const toggleMutation = useMutation({
     mutationFn: async (agentId: number) => {
@@ -94,7 +87,7 @@ export default function HomePage() {
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {agents?.map((agent) => (
-            <Card key={agent.id} className="relative group">
+            <Card key={agent.id} className="relative">
               <CardHeader>
                 <div className="flex justify-between items-start">
                   <div>
@@ -124,14 +117,11 @@ export default function HomePage() {
               </CardContent>
               <CardFooter>
                 <div className="w-full flex justify-between items-center">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleViewDetails(agent.id)}
-                  >
-                    View Details
-                    <ArrowRight className="w-4 h-4 ml-2" />
-                  </Button>
+                  <Link href={`/agents/${agent.id}`}>
+                    <Button variant="ghost" size="sm">
+                      View Details
+                    </Button>
+                  </Link>
                   <Button
                     variant="outline"
                     size="sm"

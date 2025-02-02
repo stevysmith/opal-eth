@@ -208,7 +208,7 @@ export default function AgentDetailsPage() {
     },
     enabled: !!agentId,
     retry: false,
-    staleTime: 0, // Always fetch fresh data
+    staleTime: 0,
   });
 
   if (isLoading) {
