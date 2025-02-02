@@ -36,8 +36,13 @@ class CoinbaseService {
 
   async createMpcWallet(agentId: number): Promise<string> {
     try {
-      const wallet = await this.agentKit.getActions()[0].createWallet();
+      const actions = await this.agentKit.getActions();
+      const walletAction = actions.find(action => action.type === 'wallet');
+      if (!walletAction) {
+        throw new Error('Wallet action provider not found');
+      }
       
+      const wallet = await walletAction.createWallet();
       await db.insert(mpcWallets).values({
         agentId,
         walletId: wallet.id,
