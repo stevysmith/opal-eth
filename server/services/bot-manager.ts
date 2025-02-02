@@ -55,6 +55,26 @@ class BotManager {
       console.log(`[Bot ${agentId}] Testing bot connection...`);
       const me = await bot.telegram.getMe();
       console.log(`[Bot ${agentId}] Bot info:`, me);
+
+      // Test channel access immediately after bot creation
+      console.log(`[Bot ${agentId}] Testing channel access for ${channelId}...`);
+      try {
+        const chat = await bot.telegram.getChat(channelId);
+        console.log(`[Bot ${agentId}] Successfully accessed channel:`, {
+          id: chat.id,
+          type: chat.type,
+          title: 'title' in chat ? chat.title : undefined
+        });
+      } catch (error) {
+        console.error(`[Bot ${agentId}] Failed to access channel:`, error);
+        throw new Error(
+          `Cannot access channel ${channelId}. Error: ${error.message}\n` +
+          'Please ensure:\n' +
+          '1. The channel ID is correct\n' +
+          '2. The bot is added to the channel\n' +
+          '3. The bot is an administrator in the channel'
+        );
+      }
     } catch (error) {
       console.error(`[Bot ${agentId}] Failed to get bot info:`, error);
       throw new Error(`Failed to connect to Telegram: ${error.message}`);
@@ -82,6 +102,10 @@ class BotManager {
       const config = agent.platformConfig as { token: string; channelId: string };
       if (!config?.token) {
         throw new Error("Missing Telegram bot token");
+      }
+
+      if (!config?.channelId) {
+        throw new Error("Missing channel ID");
       }
 
       // Initialize bot with more detailed error handling
@@ -152,7 +176,14 @@ class BotManager {
         console.log(`[Bot ${agentId}] Test message sent successfully:`, message);
       } catch (error) {
         console.error(`[Bot ${agentId}] Failed to send test message:`, error);
-        throw new Error(`Failed to send message to channel ${config.channelId}. Make sure the bot is an admin in the channel. Error: ${error.message}`);
+        throw new Error(
+          `Failed to send message to channel ${config.channelId}. ` +
+          `Error: ${error.message}\n` +
+          'Please ensure:\n' +
+          '1. The channel ID is correct\n' +
+          '2. The bot is added to the channel\n' +
+          '3. The bot is an administrator in the channel'
+        );
       }
 
       // Store bot instance
