@@ -9,8 +9,33 @@ class BotManager {
   private bots: Map<number, Telegraf<Context<Update>>> = new Map();
   private jobs: Map<number, schedule.Job> = new Map();
 
+  async stopAgent(agentId: number) {
+    const bot = this.bots.get(agentId);
+    if (bot) {
+      try {
+        console.log(`[Bot ${agentId}] Stopping bot...`);
+        await bot.stop();
+        console.log(`[Bot ${agentId}] Bot stopped successfully`);
+        // Remove all jobs associated with this agent
+        for (const [jobId, job] of this.jobs.entries()) {
+          job.cancel();
+          this.jobs.delete(jobId);
+        }
+        // Wait a bit after stopping to ensure cleanup
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (error) {
+        console.error(`[Bot ${agentId}] Error stopping bot:`, error);
+      }
+      this.bots.delete(agentId);
+    }
+  }
+
   async initializeAgent(agentId: number) {
     try {
+      // Stop any existing bot first
+      await this.stopAgent(agentId);
+      console.log(`[Bot ${agentId}] Creating new bot instance...`);
+
       const [agent] = await db
         .select()
         .from(agents)
@@ -25,10 +50,6 @@ class BotManager {
       if (!config?.token) {
         throw new Error("Missing Telegram bot token");
       }
-
-      // Stop existing bot if any
-      await this.stopAgent(agentId);
-      console.log(`[Bot ${agentId}] Creating new bot instance...`);
 
       // Initialize new bot
       const bot = new Telegraf(config.token);
@@ -48,7 +69,7 @@ class BotManager {
         console.log(`[Bot ${agentId}] Start command received from:`, ctx.from);
         ctx.reply(`👋 Welcome! I'm a ${agent.template} bot.\n\nAvailable commands:\n${this.getCommandList(agent.template)}`);
       });
-
+    
       bot.command("help", (ctx) => {
         ctx.reply(`Available commands:\n${this.getCommandList(agent.template)}`);
       });
@@ -72,11 +93,23 @@ class BotManager {
         ctx.reply("Sorry, something went wrong. Please try again later.");
       });
 
-      // Start bot in polling mode
+      // Start bot in polling mode with retries
       console.log(`[Bot ${agentId}] Starting bot in polling mode...`);
       try {
-        await bot.launch();
-        console.log(`[Bot ${agentId}] Bot launched successfully`);
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            await bot.launch();
+            console.log(`[Bot ${agentId}] Bot launched successfully`);
+            break;
+          } catch (error) {
+            if (error.message.includes('409: Conflict')) {
+              console.log(`[Bot ${agentId}] Launch attempt ${attempt} failed with conflict, retrying after delay...`);
+              await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+              continue;
+            }
+            throw error;
+          }
+        }
       } catch (error) {
         console.error(`[Bot ${agentId}] Failed to launch bot:`, error);
         throw error;
@@ -371,20 +404,6 @@ class BotManager {
       console.log(`Q&A Bot ${agentId} received: ${message}`);
       ctx.reply("Thank you for your question! It has been logged.");
     });
-  }
-
-  async stopAgent(agentId: number) {
-    const bot = this.bots.get(agentId);
-    if (bot) {
-      try {
-        console.log(`[Bot ${agentId}] Stopping bot...`);
-        await bot.stop();
-        console.log(`[Bot ${agentId}] Bot stopped successfully`);
-      } catch (error) {
-        console.error(`[Bot ${agentId}] Error stopping bot:`, error);
-      }
-      this.bots.delete(agentId);
-    }
   }
 
   async stopAll() {
