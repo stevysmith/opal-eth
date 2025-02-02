@@ -223,26 +223,25 @@ class BotManager {
       if (!started) {
         throw new Error("Failed to start bot after multiple attempts");
       }
-
-      // Test channel connection
-      try {
-        console.log(`[Bot ${agentId}] Testing channel connection (${formattedChannelId})...`);
-        const message = await bot.telegram.sendMessage(
-          formattedChannelId,
-          `🤖 Bot restarted and ready!\n\nTemplate: ${agent.template}\nName: ${agent.name}\n\nUse the following commands:\n${this.getCommandList(agent.template)}`
-        );
-        console.log(`[Bot ${agentId}] Test message sent successfully:`, message);
-      } catch (error) {
-        console.error(`[Bot ${agentId}] Failed to send test message:`, error);
-        throw new Error(
-          `Failed to send message to channel ${formattedChannelId}.\n` +
-          `Error: ${error.message}\n` +
-          'Please ensure:\n' +
-          '1. The channel ID is correct\n' +
-          '2. The bot is added to the channel\n' +
-          '3. The bot is an administrator in the channel'
-        );
-      }
+    // Test channel connection
+    try {
+      console.log(`[Bot ${agentId}] Testing channel connection (${formattedChannelId})...`);
+      const message = await bot.telegram.sendMessage(
+        formattedChannelId,
+        `🤖 Bot restarted and ready!\n\nTemplate: ${agent.template}\nName: ${agent.name}\n\nUse the following commands:\n${this.getCommandList(agent.template)}`
+      );
+      console.log(`[Bot ${agentId}] Test message sent successfully:`, message);
+    } catch (error) {
+      console.error(`[Bot ${agentId}] Failed to send test message:`, error);
+      throw new Error(
+        `Failed to send message to channel ${formattedChannelId}.\n` +
+        `Error: ${error.message}\n` +
+        'Please ensure:\n' +
+        '1. The channel ID is correct\n' +
+        '2. The bot is added to the channel\n' +
+        '3. The bot is an administrator in the channel'
+      );
+    }
 
       // Store bot instance
       this.bots.set(agentId, bot);
