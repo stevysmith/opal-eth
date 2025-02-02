@@ -12,27 +12,40 @@ export function registerRoutes(app: Express): Server {
   // Create new agent
   app.post("/api/agents", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
+
     try {
-      const [agent] = await db.insert(agents).values({
-        ...req.body,
-        userId: req.user.id,
-      }).returning();
+      const [agent] = await db
+        .insert(agents)
+        .values({
+          ...req.body,
+          userId: req.user.id,
+          active: false, // Start as inactive
+        })
+        .returning();
 
       // Initialize bot if it's a Telegram agent
       if (agent.platform === "telegram") {
         const config = agent.platformConfig as PlatformConfig;
         if (config?.token) {
           try {
-            await botManager.initializeAgent(agent.id);
+            // Initialize bot with timeout
+            await Promise.race([
+              botManager.initializeAgent(agent.id),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error("Bot initialization timed out")), 15000)
+              )
+            ]);
+
             // Update agent status to active
             await db
               .update(agents)
               .set({ active: true })
               .where(eq(agents.id, agent.id));
+
             agent.active = true;
           } catch (error) {
             console.error("Failed to initialize bot:", error);
-            // Don't fail the request, just mark the agent as inactive
+            // Don't fail the request, just mark the agent as inactive and return
             agent.active = false;
           }
         }
@@ -41,7 +54,10 @@ export function registerRoutes(app: Express): Server {
       res.json(agent);
     } catch (error) {
       console.error("Error creating agent:", error);
-      res.status(500).json({ error: "Failed to create agent" });
+      res.status(500).json({ 
+        error: "Failed to create agent",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
     }
   });
 
@@ -89,7 +105,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Clean up bots when server shuts down
+    // Clean up bots when server shuts down
   process.on('SIGTERM', async () => {
     await botManager.stopAll();
     process.exit(0);

@@ -5,45 +5,68 @@ import { agents, polls, votes, giveaways, giveawayEntries } from "@db/schema";
 import { eq } from "drizzle-orm";
 import schedule from "node-schedule";
 
+const INIT_TIMEOUT = 10000; // 10 seconds timeout for bot initialization
+
 class BotManager {
   private bots: Map<number, Telegraf<Context<Update>>> = new Map();
   private jobs: Map<number, schedule.Job> = new Map();
 
   async initializeAgent(agentId: number) {
-    // Get agent details from database
-    const [agent] = await db
-      .select()
-      .from(agents)
-      .where(eq(agents.id, agentId))
-      .limit(1);
+    try {
+      // Get agent details from database
+      const [agent] = await db
+        .select()
+        .from(agents)
+        .where(eq(agents.id, agentId))
+        .limit(1);
 
-    if (!agent || agent.platform !== "telegram" || !agent.platformConfig.token) {
-      throw new Error("Invalid agent configuration");
-    }
-
-    // Initialize bot if not exists
-    if (!this.bots.has(agentId)) {
-      const bot = new Telegraf(agent.platformConfig.token as string);
-
-      // Set up command handlers based on template
-      switch (agent.template) {
-        case "poll":
-          this.setupPollCommands(bot, agentId);
-          break;
-        case "giveaway":
-          this.setupGiveawayCommands(bot, agentId);
-          break;
-        case "qa":
-          this.setupQACommands(bot, agentId);
-          break;
+      if (!agent || agent.platform !== "telegram") {
+        throw new Error("Invalid agent configuration");
       }
 
-      // Start bot
-      await bot.launch();
-      this.bots.set(agentId, bot);
-    }
+      const config = agent.platformConfig as { token: string; channelId: string };
+      if (!config?.token) {
+        throw new Error("Missing Telegram bot token");
+      }
 
-    return this.bots.get(agentId)!;
+      // Initialize bot if not exists
+      if (!this.bots.has(agentId)) {
+        const bot = new Telegraf(config.token);
+
+        // Set up command handlers based on template
+        switch (agent.template) {
+          case "poll":
+            this.setupPollCommands(bot, agentId);
+            break;
+          case "giveaway":
+            this.setupGiveawayCommands(bot, agentId);
+            break;
+          case "qa":
+            this.setupQACommands(bot, agentId);
+            break;
+        }
+
+        // Launch bot with timeout
+        const launchPromise = bot.launch();
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error("Bot initialization timed out")), INIT_TIMEOUT);
+        });
+
+        try {
+          await Promise.race([launchPromise, timeoutPromise]);
+          this.bots.set(agentId, bot);
+          return bot;
+        } catch (error) {
+          console.error(`Failed to initialize bot ${agentId}:`, error);
+          throw error;
+        }
+      }
+
+      return this.bots.get(agentId)!;
+    } catch (error) {
+      console.error(`Error in initializeAgent for agent ${agentId}:`, error);
+      throw error;
+    }
   }
 
   private setupPollCommands(bot: Telegraf<Context<Update>>, agentId: number) {
