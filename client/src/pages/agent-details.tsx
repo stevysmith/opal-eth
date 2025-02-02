@@ -53,8 +53,17 @@ export default function AgentDetailsPage() {
   const params = useParams<{ id: string }>();
   const agentId = params.id ? parseInt(params.id) : undefined;
 
-  const { data: agent, isLoading } = useQuery<EnrichedAgent>({
-    queryKey: [`/api/agents/${agentId}`],
+  const { data: agent, isLoading, error } = useQuery<EnrichedAgent>({
+    queryKey: ["/api/agents", agentId],
+    queryFn: async () => {
+      if (!agentId) throw new Error("No agent ID provided");
+      const response = await fetch(`/api/agents/${agentId}`);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to fetch agent");
+      }
+      return response.json();
+    },
     enabled: !!agentId,
   });
 
@@ -62,6 +71,14 @@ export default function AgentDetailsPage() {
     return (
       <div className="flex justify-center items-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-8 text-center text-destructive">
+        {error instanceof Error ? error.message : "Failed to load agent"}
       </div>
     );
   }

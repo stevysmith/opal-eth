@@ -134,10 +134,20 @@ export function registerRoutes(app: Express): Server {
 
   // Get single agent with details
   app.get("/api/agents/:id", async (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
+    if (!req.isAuthenticated()) {
+      console.log("Unauthorized access attempt to agent details");
+      return res.sendStatus(401);
+    }
 
     try {
       const agentId = parseInt(req.params.id);
+      console.log(`Fetching agent ${agentId} for user ${req.user.id}`);
+
+      if (isNaN(agentId)) {
+        console.log(`Invalid agent ID: ${req.params.id}`);
+        return res.status(400).json({ error: "Invalid agent ID" });
+      }
+
       const [agent] = await db
         .select()
         .from(agents)
@@ -148,9 +158,11 @@ export function registerRoutes(app: Express): Server {
         .limit(1);
 
       if (!agent) {
+        console.log(`Agent ${agentId} not found for user ${req.user.id}`);
         return res.status(404).json({ error: "Agent not found" });
       }
 
+      console.log(`Found agent ${agentId}, fetching polls and giveaways`);
       const now = new Date();
 
       // Get both active and past polls/giveaways
