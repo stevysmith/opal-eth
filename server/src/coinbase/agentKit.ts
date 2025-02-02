@@ -1,84 +1,77 @@
-
-import { AgentKit, walletActionProvider, erc20ActionProvider } from '@coinbase/agentkit';
+import { 
+  AgentKit, 
+  walletActionProvider,
+  erc20ActionProvider,
+  cdpApiActionProvider,
+  cdpWalletActionProvider,
+  type WalletActionProvider,
+  type ERC20ActionProvider
+} from '@coinbase/agentkit';
 import { db } from "@db";
 import { mpcWallets } from "@db/schema";
 import { eq } from "drizzle-orm";
 
 class CoinbaseService {
-  private agentKit: AgentKit;
+  private agentKit: AgentKit | null = null;
   private config: {
     apiKeyName: string;
     apiKeyPrivateKey: string;
     networkId: string;
   };
 
-  constructor(config: { apiKeyName: string; apiKeyPrivateKey: string }) {
+  constructor() {
+    // Validate required environment variables
+    const apiKeyName = process.env.CDP_API_KEY_NAME;
+    const apiKeyPrivateKey = process.env.CDP_API_KEY_PRIVATE_KEY;
+
+    if (!apiKeyName || !apiKeyPrivateKey) {
+      throw new Error('Missing required CDP API credentials');
+    }
+
     this.config = {
-      apiKeyName: config.apiKeyName,
-      apiKeyPrivateKey: config.apiKeyPrivateKey.replace(/\\n/g, "\n"),
-      networkId: process.env.NETWORK_ID || "base-sepolia",
+      apiKeyName,
+      apiKeyPrivateKey: apiKeyPrivateKey.replace(/\\n/g, "\n"),
+      networkId: "base-sepolia", // Use testnet by default
     };
-    this.initializeAgentKit();
   }
 
-  private async initializeAgentKit() {
-    try {
-      // Create action providers
-      const wallet = walletActionProvider();
-      const erc20 = erc20ActionProvider();
-      
-      // Directly set types as properties
-      wallet.type = 'wallet';
-      wallet.name = 'wallet';
-      
-      erc20.type = 'erc20';
-      erc20.name = 'erc20';
+  private async ensureInitialized() {
+    if (!this.agentKit) {
+      try {
+        // Initialize the action providers
+        const wallet = walletActionProvider();
+        const erc20 = erc20ActionProvider();
 
-      console.log('Initializing wallet action:', {
-        type: wallet.type,
-        name: wallet.name,
-        methods: Object.keys(wallet)
-      });
-      console.log('Initializing erc20 action:', {
-        type: erc20.type,
-        name: erc20.name,
-        methods: Object.keys(erc20)
-      });
-      
-      this.agentKit = await AgentKit.from({
-        cdpApiKeyName: this.config.apiKeyName,
-        cdpApiKeyPrivateKey: this.config.apiKeyPrivateKey,
-        actionProviders: [wallet, erc20],
-      });
-    } catch (error) {
-      console.error('Error initializing AgentKit:', error);
-      throw error;
+        // Initialize AgentKit
+        this.agentKit = await AgentKit.create({
+          apiKeyName: this.config.apiKeyName,
+          apiKeyPrivateKey: this.config.apiKeyPrivateKey,
+          network: this.config.networkId,
+          actionProviders: [wallet, erc20],
+        });
+
+        console.log('AgentKit initialized successfully');
+      } catch (error) {
+        console.error('Failed to initialize AgentKit:', error);
+        throw error;
+      }
     }
   }
 
   async createMpcWallet(agentId: number): Promise<string> {
     try {
+      await this.ensureInitialized();
+      if (!this.agentKit) throw new Error('AgentKit not initialized');
+
       console.log('Creating MPC wallet for agent:', agentId);
-      
-      const actions = this.agentKit.getActions();
-      console.log('Available actions:', actions.map(a => ({ type: a.type, methods: Object.keys(a) })));
-      
-      const walletAction = actions.find(action => action.type === 'wallet');
-      console.log('Found wallet action:', walletAction ? 'yes' : 'no', walletAction);
-      
-      if (!walletAction) {
-        throw new Error('Wallet action provider not found');
+
+      const wallet = await this.agentKit.createWallet();
+      if (!wallet?.id) {
+        throw new Error('Failed to create wallet - no wallet ID returned');
       }
 
-      console.log('Attempting to create wallet...');
-      const wallet = await walletAction.createWallet();
-      console.log('Wallet creation response:', wallet);
+      console.log('Created wallet:', wallet.id);
 
-      if (!wallet) {
-        throw new Error('Wallet creation returned null/undefined');
-      }
-
-      console.log('Inserting wallet record into database...');
       await db.insert(mpcWallets).values({
         agentId,
         walletId: wallet.id,
@@ -90,12 +83,8 @@ class CoinbaseService {
       console.error('Error creating MPC wallet:', {
         error,
         stack: error instanceof Error ? error.stack : undefined,
-        agentKitState: {
-          initialized: !!this.agentKit,
-          hasActions: this.agentKit?.getActions()?.length > 0
-        }
       });
-      throw error; // Throw original error to preserve stack trace
+      throw error;
     }
   }
 
@@ -110,48 +99,56 @@ class CoinbaseService {
       return wallet?.walletId || null;
     } catch (error) {
       console.error('Error getting wallet for agent:', error);
-      throw new Error('Failed to get wallet for agent');
+      throw error;
     }
   }
 
   async getWalletBalance(walletId: string): Promise<string> {
     try {
-      const walletAction = this.agentKit.getActions().find(action => action.type === 'wallet');
-      if (!walletAction) {
-        throw new Error('Wallet action not found');
+      await this.ensureInitialized();
+      if (!this.agentKit) throw new Error('AgentKit not initialized');
+
+      const wallet = await this.agentKit.getWallet(walletId);
+      if (!wallet) {
+        throw new Error('Wallet not found');
       }
-      const wallet = await walletAction.getWallet(walletId);
+
       const balance = await wallet.getBalance('USDC');
       return balance.toString();
     } catch (error) {
       console.error('Error getting wallet balance:', error);
-      throw new Error('Failed to get wallet balance');
+      throw error;
     }
   }
 
   async sendUsdc(fromWalletId: string, toAddress: string, amount: string): Promise<string> {
     try {
-      const walletAction = this.agentKit.getActions().find(action => action.type === 'wallet');
-      if (!walletAction) {
-        throw new Error('Wallet action not found');
+      await this.ensureInitialized();
+      if (!this.agentKit) throw new Error('AgentKit not initialized');
+
+      const wallet = await this.agentKit.getWallet(fromWalletId);
+      if (!wallet) {
+        throw new Error('Source wallet not found');
       }
-      const wallet = await walletAction.getWallet(fromWalletId);
+
       const tx = await wallet.send({
         to: toAddress,
         amount,
         asset: 'USDC'
       });
+
+      if (!tx?.hash) {
+        throw new Error('Transaction failed - no hash returned');
+      }
+
       return tx.hash;
     } catch (error) {
       console.error('Error sending USDC:', error);
-      throw new Error('Failed to send USDC');
+      throw error;
     }
   }
 }
 
-const coinbaseService = new CoinbaseService({
-  apiKeyName: process.env.CDP_API_KEY_NAME!,
-  apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY!,
-});
-
+// Create and export a singleton instance
+const coinbaseService = new CoinbaseService();
 export default coinbaseService;
