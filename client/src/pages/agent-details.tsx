@@ -59,10 +59,12 @@ export default function AgentDetailsPage() {
     queryFn: async () => {
       if (!agentId) throw new Error("No agent ID provided");
       const response = await apiRequest("GET", `/api/agents/${agentId}`);
-      const data = await response.json();
       if (!response.ok) {
+        const data = await response.json();
+        console.error("Failed to fetch agent:", data);
         throw new Error(data.error || "Failed to fetch agent");
       }
+      const data = await response.json();
       return data;
     },
     enabled: !!agentId,
