@@ -30,8 +30,8 @@ export default function PersonaStep() {
     resolver: zodResolver(personaSchema),
     defaultValues: {
       name: formData.name || "",
-      description: formData.description || "",
-      tone: formData.tone || "",
+      description: formData.persona?.description || "",
+      tone: formData.persona?.tone || "",
     },
   });
 
