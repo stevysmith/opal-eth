@@ -13,7 +13,6 @@ class BotManager {
 
   async initializeAgent(agentId: number) {
     try {
-      // Get agent details from database
       const [agent] = await db
         .select()
         .from(agents)
@@ -31,6 +30,7 @@ class BotManager {
 
       // Initialize bot if not exists
       if (!this.bots.has(agentId)) {
+        console.log(`Initializing bot ${agentId} for channel ${config.channelId}...`);
         const bot = new Telegraf(config.token);
 
         // Set up command handlers based on template
@@ -44,6 +44,18 @@ class BotManager {
           case "qa":
             this.setupQACommands(bot, agentId);
             break;
+        }
+
+        // Test channel connection
+        try {
+          await bot.telegram.sendMessage(
+            config.channelId,
+            `🤖 Bot initialized successfully!\n\nTemplate: ${agent.template}\nName: ${agent.name}\n\nUse the following commands:\n${this.getCommandList(agent.template)}`
+          );
+          console.log(`Bot ${agentId} successfully connected to channel ${config.channelId}`);
+        } catch (error) {
+          console.error(`Failed to send test message to channel ${config.channelId}:`, error);
+          throw new Error(`Bot couldn't send messages to the channel. Make sure the bot is an admin in the channel and has permission to post messages.`);
         }
 
         // Launch bot with timeout
@@ -66,6 +78,19 @@ class BotManager {
     } catch (error) {
       console.error(`Error in initializeAgent for agent ${agentId}:`, error);
       throw error;
+    }
+  }
+
+  private getCommandList(template: string): string {
+    switch (template) {
+      case "poll":
+        return "📊 /poll \"Question\" [\"Option1\",\"Option2\"]\n🗳️ /vote <poll_id> <option_number>";
+      case "giveaway":
+        return "🎉 /giveaway \"Prize\" <duration_in_hours>\n🎫 /enter <giveaway_id>";
+      case "qa":
+        return "❓ Just send your questions in the chat!";
+      default:
+        return "";
     }
   }
 
@@ -117,7 +142,7 @@ class BotManager {
           }, {});
 
           const resultsMessage = options
-            .map((opt: string, i: number) => 
+            .map((opt: string, i: number) =>
               `${opt}: ${counts[i] || 0} votes`)
             .join("\n");
 
