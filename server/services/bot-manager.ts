@@ -439,6 +439,15 @@ class BotManager {
       await next();
     });
 
+        // Debug logging for all messages
+    bot.on("message", (ctx) => {
+      console.log(`[Bot ${agentId}] Received message:`, {
+        from: ctx.from?.id,
+        text: ctx.message,
+        type: ctx.updateType
+      });
+    });
+
     const handleGiveawayCommand = async (ctx: Context) => {
       try {
         const text = ctx.message?.text || ctx.channelPost?.text || '';
@@ -558,20 +567,28 @@ class BotManager {
       }
     };
 
-    // Register command handlers for both regular messages and channel posts
-    bot.command("giveaway", handleGiveawayCommand);
-    bot.on('channel_post', (ctx, next) => {
-      if (ctx.channelPost?.text?.startsWith('/giveaway')) {
-        return handleGiveawayCommand(ctx);
-      }
-      return next();
-    });
-
-    // Add command for entering giveaways
-    bot.command("enter", async (ctx) => {
+    const handleEnterCommand = async (ctx: Context) => {
       try {
-        console.log(`[Bot ${agentId}] Received enter command:`, ctx.message.text);
-        const giveawayId = parseInt(ctx.message.text.split(" ")[1]);
+        const text = ctx.message?.text || ctx.channelPost?.text || '';
+        console.log(`[Bot ${agentId}] Processing enter command. Full message:`, {
+          text,
+          messageFrom: ctx.message?.from,
+          channelPost: ctx.channelPost,
+          chat: ctx.chat,
+          from: ctx.from
+        });
+
+        // If this is a channel post, instruct to send DM
+        if (ctx.channelPost) {
+          return bot.telegram.sendMessage(
+            ctx.chat.id,
+            '🎫 To enter the giveaway, please send the /enter command directly to the bot in a private message.\n\n' +
+            'This ensures we can properly link your entry to your wallet address for prize distribution.'
+          );
+        }
+
+        const giveawayId = parseInt(text.split(" ")[1]);
+        console.log(`[Bot ${agentId}] Parsed giveaway ID:`, giveawayId);
 
         if (isNaN(giveawayId)) {
           return ctx.reply("Please provide a valid giveaway ID. Example: /enter 123");
@@ -591,39 +608,74 @@ class BotManager {
           return ctx.reply("This giveaway has ended");
         }
 
+        // For direct messages, we can reliably get the user's Telegram ID
+        if (!ctx.from?.id) {
+          return ctx.reply("Could not identify you. Please make sure you're sending this command directly to the bot.");
+        }
+
+        const userId = ctx.from.id.toString();
+
+        // Check if user has wallet configured
+        const [userRecord] = await db
+          .select()
+          .from(users)
+          .where(eq(users.username, userId))
+          .limit(1);
+
+        if (!userRecord?.walletAddress) {
+          return ctx.reply(
+            "⚠️ You need to set up your wallet address first before entering giveaways.\n\n" +
+            "Please visit the web dashboard to configure your wallet address."
+          );
+        }
+
         // Check if user already entered
         const [existingEntry] = await db
           .select()
           .from(giveawayEntries)
           .where(and(
             eq(giveawayEntries.giveawayId, giveaway.id),
-            eq(giveawayEntries.userId, ctx.from.id.toString())
+            eq(giveawayEntries.userId, userId)
           ))
           .limit(1);
 
         if (existingEntry) {
+          console.log(`[Bot ${agentId}] User ${userId} already entered giveaway ${giveawayId}`);
           return ctx.reply("You've already entered this giveaway!");
         }
 
         await db.insert(giveawayEntries).values({
           giveawayId: giveaway.id,
-          userId: ctx.from.id.toString(),
+          userId,
         });
 
-        ctx.reply("🎫 You've been entered into the giveaway! Good luck!");
+        console.log(`[Bot ${agentId}] User ${userId} successfully entered giveaway ${giveawayId}`);
+        ctx.reply(
+          "🎫 You've been entered into the giveaway! Good luck!\n\n" +
+          "Make sure your wallet address is correctly configured in the web dashboard to receive prizes."
+        );
       } catch (error) {
         console.error(`[Bot ${agentId}] Error handling enter command:`, error);
         ctx.reply("Failed to enter giveaway. Please try again.");
       }
+    };
+
+    // Register command handlers for both regular messages and channel posts
+    bot.command("giveaway", handleGiveawayCommand);
+    bot.on('channel_post', (ctx, next) => {
+      if (ctx.channelPost?.text?.startsWith('/giveaway')) {
+        return handleGiveawayCommand(ctx);
+      }
+      return next();
     });
 
-    // Debug logging for all messages
-    bot.on("message", (ctx) => {
-      console.log(`[Bot ${agentId}] Received message:`, {
-        from: ctx.from?.id,
-        text: ctx.message,
-        type: ctx.updateType
-      });
+    // Register enter command handlers for both regular messages and channel posts
+    bot.command("enter", handleEnterCommand);
+    bot.on('channel_post', (ctx, next) => {
+      if (ctx.channelPost?.text?.startsWith('/enter')) {
+        return handleEnterCommand(ctx);
+      }
+      return next();
     });
   }
 
