@@ -492,17 +492,21 @@ class BotManager {
 
         console.log(`[Bot ${agentId}] Created giveaway:`, giveaway);
 
-        // Send confirmation message to the channel
+          // Send confirmation message to the channel
         const chatId = ctx.chat?.id.toString();
         console.log(`[Bot ${agentId}] Sending confirmation to chat:`, chatId);
-
+        const me = await bot.telegram.getMe();
         const response = await bot.telegram.sendMessage(
           chatId!,
           `🎉 New Giveaway!\n\n` +
           `Prize: ${prize.trim()}\n` +
           `Duration: ${durationHours < 1 ? `${Math.round(durationHours * 60)} minutes` : `${durationHours} hours`}\n\n` +
-          `Type /enter ${giveaway.id} to participate!`
+          `To participate:\n` +
+          `1. Open a direct message with @${me.username}\n` +
+          `2. Send the command: /enter ${giveaway.id}\n\n` +
+          `Make sure you have configured your wallet address in the web dashboard to receive prizes!`
         );
+
 
         console.log(`[Bot ${agentId}] Sent confirmation message:`, response);
 
@@ -580,10 +584,14 @@ class BotManager {
 
         // If this is a channel post, instruct to send DM
         if (ctx.channelPost) {
+          const me = await bot.telegram.getMe();
           return bot.telegram.sendMessage(
             ctx.chat.id,
-            '🎫 To enter the giveaway, please send the /enter command directly to the bot in a private message.\n\n' +
-            'This ensures we can properly link your entry to your wallet address for prize distribution.'
+            '🎫 To enter the giveaway, please follow these steps:\n\n' +
+            `1. Click this link to open chat: @${me.username}\n` +
+            `2. Send the command: /enter ${giveawayId}\n\n` +
+            'This ensures we can properly link your entry to your wallet address for prize distribution.\n\n' +
+            'Remember: You need to have your wallet address configured in the web dashboard to receive prizes!'
           );
         }
 
