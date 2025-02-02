@@ -153,20 +153,52 @@ class BotManager {
   private setupPollCommands(bot: Telegraf<Context<Update>>, agentId: number) {
     bot.command("poll", async (ctx) => {
       try {
-        const message = ctx.message.text.substring(6); // Remove '/poll '
-        const [question, optionsStr] = message.split('" [');
+        console.log(`[Bot ${agentId}] Received poll command:`, ctx.message.text);
+        const message = ctx.message.text.substring(6).trim(); // Remove '/poll ' and trim
+
+        // Find the question part (everything up to the first [)
+        const questionEndIndex = message.lastIndexOf('" [');
+        if (questionEndIndex === -1) {
+          return ctx.reply("Invalid format. Use: /poll \"Question\" [\"Option1\",\"Option2\"]");
+        }
+
+        const question = message.substring(0, questionEndIndex + 1);
+        const optionsStr = message.substring(questionEndIndex + 2);
+
+        console.log(`[Bot ${agentId}] Parsed poll:`, { question, optionsStr });
 
         if (!question || !optionsStr) {
           return ctx.reply("Invalid format. Use: /poll \"Question\" [\"Option1\",\"Option2\"]");
         }
 
-        const options = JSON.parse(optionsStr);
-        if (!Array.isArray(options)) {
-          return ctx.reply("Options must be an array");
+        // Clean up the options string and parse it
+        const cleanOptionsStr = optionsStr
+          .replace(/,\s*]/g, ']') // Remove trailing commas before ]
+          .replace(/\s+/g, ' '); // Normalize whitespace
+
+        let options;
+        try {
+          options = JSON.parse(cleanOptionsStr);
+        } catch (error) {
+          console.error(`[Bot ${agentId}] Error parsing options:`, error);
+          return ctx.reply(
+            "Invalid options format. Make sure to use proper JSON array syntax.\n" +
+            'Example: /poll "What is your favorite color?" ["Red","Blue","Green"]'
+          );
+        }
+
+        if (!Array.isArray(options) || options.length < 2) {
+          return ctx.reply("You must provide at least 2 options");
         }
 
         const endTime = new Date();
         endTime.setHours(endTime.getHours() + 24); // 24 hour polls
+
+        console.log(`[Bot ${agentId}] Creating poll in database:`, {
+          question: question.replace(/^"|"$/g, ''),
+          options,
+          endTime
+        });
 
         const [poll] = await db.insert(polls).values({
           agentId,
@@ -175,6 +207,8 @@ class BotManager {
           startTime: new Date(),
           endTime,
         }).returning();
+
+        console.log(`[Bot ${agentId}] Poll created:`, poll);
 
         // Send poll message
         const optionsMessage = options
@@ -207,7 +241,7 @@ class BotManager {
           );
         }));
       } catch (error) {
-        console.error("Error creating poll:", error);
+        console.error(`[Bot ${agentId}] Error creating poll:`, error);
         ctx.reply("Failed to create poll. Please try again.");
       }
     });
