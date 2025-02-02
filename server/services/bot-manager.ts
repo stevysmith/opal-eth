@@ -230,7 +230,6 @@ class BotManager {
           // Add pre-launch logging
           console.log(`[Bot ${agentId}] Preparing to launch bot...`);
           console.log(`[Bot ${agentId}] Current bot state:`, {
-            commands: bot.context.telegram.commands || 'No commands set',
             token: `${config.token.substring(0, 5)}...${config.token.substring(config.token.length - 5)}`,
             finalChannelId
           });
