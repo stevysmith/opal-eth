@@ -420,7 +420,105 @@ class BotManager {
       await next();
     });
 
-    // Register both command and hears handler for /enter to catch all cases
+    const handleGiveawayCommand = async (ctx: Context) => {
+      try {
+        const text = ctx.message?.text || ctx.channelPost?.text || '';
+        console.log(`[Bot ${agentId}] Processing giveaway command. Full message:`, text);
+
+        const message = text.substring(9).trim();
+        console.log(`[Bot ${agentId}] Parsed command text:`, message);
+
+        const match = message.match(/^(.*?)\s+in\s+(\d+)\s*(mins?|minutes?|hours?|h)$/i);
+        console.log(`[Bot ${agentId}] Regex match result:`, match);
+
+        if (!match) {
+          console.log(`[Bot ${agentId}] Invalid format:`, message);
+          return ctx.reply(
+            'Invalid format. Use: /giveaway <prize> in <number> <minutes/hours>\n' +
+            'Examples:\n' +
+            '• /giveaway 1 USDC in 1 hour\n' +
+            '• /giveaway 10 USDC in 30 minutes\n' +
+            '• /giveaway "Special NFT" in 5 mins'
+          );
+        }
+
+        const [, prize, amount, unit] = match;
+        const isMinutes = unit.toLowerCase().startsWith('min') || unit.toLowerCase() === 'm';
+        const durationHours = isMinutes ? parseInt(amount) / 60 : parseInt(amount);
+        const endTime = new Date();
+        endTime.setHours(endTime.getHours() + durationHours);
+
+        const [giveaway] = await db.insert(giveaways).values({
+          agentId,
+          prize: prize.trim(),
+          startTime: new Date(),
+          endTime,
+        }).returning();
+
+        const me = await bot.telegram.getMe();
+        const response = await ctx.reply(
+          `🎉 New Giveaway!\n\n` +
+          `Prize: ${prize.trim()}\n` +
+          `Duration: ${durationHours < 1 ? `${Math.round(durationHours * 60)} minutes` : `${durationHours} hours`}\n\n` +
+          `To participate:\n` +
+          `1. Open a direct message with @${me.username}\n` +
+          `2. Send the command: /enter ${giveaway.id} <your-wallet-address>\n\n` +
+          `Example: /enter ${giveaway.id} 0x742d35Cc6634C0532925a3b844Bc454e4438f44e\n\n` +
+          `Make sure to provide a valid wallet address to receive your prize if you win!`
+        );
+
+        console.log(`[Bot ${agentId}] Sent confirmation message:`, response);
+
+        this.jobs.set(giveaway.id, schedule.scheduleJob(endTime, async () => {
+          try {
+            const entries = await db
+              .select()
+              .from(giveawayEntries)
+              .where(eq(giveawayEntries.giveawayId, giveaway.id));
+
+            if (entries.length === 0) {
+              await ctx.reply(`Giveaway for "${prize}" ended with no participants!`);
+              return;
+            }
+
+            const winner = entries[Math.floor(Math.random() * entries.length)];
+            try {
+              const payoutResult = await giveawayPayoutService.processGiveawayWinner(giveaway.id, winner.userId);
+              await ctx.reply(
+                `🎉 Giveaway Ended!\n\n` +
+                `Prize: ${prize}\n` +
+                `Winner: @${winner.userId}\n` +
+                `💰 USDC Payment Sent!\n` +
+                `Amount: ${payoutResult.amount} USDC\n` +
+                `Transaction: ${payoutResult.txHash}\n\n` +
+                `Congratulations!`
+              );
+            } catch (error) {
+              console.error(`[Bot ${agentId}] Error processing payout:`, error);
+              await db
+                .update(giveaways)
+                .set({ winnerId: winner.userId })
+                .where(eq(giveaways.id, giveaway.id));
+
+              await ctx.reply(
+                `🎉 Giveaway Ended!\n\n` +
+                `Prize: ${prize}\n` +
+                `Winner: @${winner.userId}\n` +
+                `⚠️ Note: ${error instanceof Error ? error.message : 'Unknown error'}\n\n` +
+                `Congratulations to the winner! Our team will handle the payout manually.`
+              );
+            }
+          } catch (error) {
+            console.error(`[Bot ${agentId}] Error ending giveaway:`, error);
+            await ctx.reply('An error occurred while ending the giveaway.');
+          }
+        }));
+      } catch (error) {
+        console.error(`[Bot ${agentId}] Error creating giveaway:`, error);
+        return ctx.reply("Failed to create giveaway. Please try again.");
+      }
+    };
+
     const handleEnterCommand = async (ctx: Context) => {
       console.log(`[Bot ${agentId}] Enter command triggered:`, {
         text: ctx.message?.text,
@@ -525,11 +623,9 @@ class BotManager {
       }
     };
 
-    // Register both for command and text pattern
+    // Register command handlers
     bot.command('enter', handleEnterCommand);
     bot.hears(/^\/enter/, handleEnterCommand);
-
-    // Handle giveaway commands
     bot.command("giveaway", handleGiveawayCommand);
     bot.on('channel_post', (ctx, next) => {
       if (ctx.channelPost?.text?.startsWith('/giveaway')) {
