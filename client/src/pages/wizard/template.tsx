@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { TemplateCard } from "@/components/wizard/TemplateCard";
 import { MessageSquare, Award, BarChart3 } from "lucide-react";
+import { useWizard } from "@/hooks/use-wizard";
 
 const templates = [
   {
@@ -26,8 +27,16 @@ const templates = [
 ];
 
 export default function TemplateStep() {
-  const [selected, setSelected] = useState<string>();
+  const { formData, setFormData } = useWizard();
+  const [selected, setSelected] = useState<string>(formData.template || "");
   const [, navigate] = useLocation();
+
+  const handleContinue = () => {
+    if (selected) {
+      setFormData({ template: selected });
+      navigate("/wizard/persona");
+    }
+  };
 
   return (
     <div className="max-w-3xl mx-auto space-y-8">
@@ -53,7 +62,7 @@ export default function TemplateStep() {
 
       <div className="flex justify-end">
         <Button
-          onClick={() => navigate("/wizard/persona")}
+          onClick={handleContinue}
           disabled={!selected}
         >
           Continue
