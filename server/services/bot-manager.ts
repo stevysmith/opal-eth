@@ -77,6 +77,7 @@ class BotManager {
       const formattedChannelId = channelId.startsWith('@') ? channelId : `@${channelId}`;
       console.log(`[Bot ${agentId}] Testing channel access for ${formattedChannelId}...`);
 
+      let finalChannelId: string;
       try {
         // First try with the @ format
         const chat = await bot.telegram.getChat(formattedChannelId);
@@ -85,7 +86,7 @@ class BotManager {
           type: chat.type,
           title: 'title' in chat ? chat.title : undefined
         });
-        return { bot, channelId: formattedChannelId };
+        finalChannelId = chat.id.toString(); // Use numeric ID for better reliability
       } catch (firstError) {
         console.log(`[Bot ${agentId}] Failed with @ format, trying numeric ID...`);
         try {
@@ -97,7 +98,7 @@ class BotManager {
             type: chat.type,
             title: 'title' in chat ? chat.title : undefined
           });
-          return { bot, channelId: numericId };
+          finalChannelId = numericId;
         } catch (secondError) {
           console.error(`[Bot ${agentId}] All channel access attempts failed:`, { firstError, secondError });
           throw new Error(
@@ -109,9 +110,27 @@ class BotManager {
           );
         }
       }
+
+      // Test message sending explicitly
+      try {
+        console.log(`[Bot ${agentId}] Testing message sending to channel ${finalChannelId}...`);
+        const testMessage = await bot.telegram.sendMessage(
+          finalChannelId,
+          '🤖 Bot test message - initializing...'
+        );
+        console.log(`[Bot ${agentId}] Test message sent successfully:`, testMessage);
+      } catch (error) {
+        console.error(`[Bot ${agentId}] Failed to send test message:`, error);
+        throw new Error(
+          `Failed to send message to channel. Error: ${error.message}\n` +
+          'Please ensure the bot has posting permissions in the channel.'
+        );
+      }
+
+      return { bot, channelId: finalChannelId };
     } catch (error) {
-      console.error(`[Bot ${agentId}] Failed to get bot info:`, error);
-      throw new Error(`Failed to connect to Telegram: ${error.message}`);
+      console.error(`[Bot ${agentId}] Failed to initialize bot:`, error);
+      throw error;
     }
   }
 
