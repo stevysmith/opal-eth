@@ -439,12 +439,12 @@ class BotManager {
       await next();
     });
 
-    bot.command("giveaway", async (ctx) => {
+    const handleGiveawayCommand = async (ctx: Context) => {
       try {
-        const messageText = ctx.message?.text || '';
-        console.log(`[Bot ${agentId}] Processing giveaway command. Full message:`, messageText);
+        const text = ctx.message?.text || ctx.channelPost?.text || '';
+        console.log(`[Bot ${agentId}] Processing giveaway command. Full message:`, text);
 
-        const message = messageText.substring(9).trim(); // Remove '/giveaway '
+        const message = text.substring(9).trim(); // Remove '/giveaway '
         console.log(`[Bot ${agentId}] Parsed command text:`, message);
 
         // More flexible regex to handle various formats
@@ -483,8 +483,12 @@ class BotManager {
 
         console.log(`[Bot ${agentId}] Created giveaway:`, giveaway);
 
-        // Send confirmation message
-        const response = await ctx.reply(
+        // Send confirmation message to the channel
+        const chatId = ctx.chat?.id.toString();
+        console.log(`[Bot ${agentId}] Sending confirmation to chat:`, chatId);
+
+        const response = await bot.telegram.sendMessage(
+          chatId!,
           `🎉 New Giveaway!\n\n` +
           `Prize: ${prize.trim()}\n` +
           `Duration: ${durationHours < 1 ? `${Math.round(durationHours * 60)} minutes` : `${durationHours} hours`}\n\n` +
@@ -502,7 +506,7 @@ class BotManager {
               .where(eq(giveawayEntries.giveawayId, giveaway.id));
 
             if (entries.length === 0) {
-              await ctx.reply(`Giveaway for "${prize}" ended with no participants!`);
+              await bot.telegram.sendMessage(chatId!, `Giveaway for "${prize}" ended with no participants!`);
               return;
             }
 
@@ -514,7 +518,8 @@ class BotManager {
               const payoutResult = await giveawayPayoutService.processGiveawayWinner(giveaway.id, winner.userId);
 
               // Send success message with transaction details
-              await ctx.reply(
+              await bot.telegram.sendMessage(
+                chatId!,
                 `🎉 Giveaway Ended!\n\n` +
                 `Prize: ${prize}\n` +
                 `Winner: @${winner.userId}\n` +
@@ -533,7 +538,8 @@ class BotManager {
                 .where(eq(giveaways.id, giveaway.id));
 
               // Send message indicating payout issue
-              await ctx.reply(
+              await bot.telegram.sendMessage(
+                chatId!,
                 `🎉 Giveaway Ended!\n\n` +
                 `Prize: ${prize}\n` +
                 `Winner: @${winner.userId}\n` +
@@ -543,14 +549,22 @@ class BotManager {
             }
           } catch (error) {
             console.error(`[Bot ${agentId}] Error ending giveaway:`, error);
-            await ctx.reply('An error occurred while ending the giveaway.');
+            await bot.telegram.sendMessage(chatId!, 'An error occurred while ending the giveaway.');
           }
         }));
-
       } catch (error) {
         console.error(`[Bot ${agentId}] Error handling giveaway command:`, error);
-        await ctx.reply("Failed to create giveaway. Please try again.");
+        ctx.reply("Failed to create giveaway. Please try again.");
       }
+    };
+
+    // Register command handlers for both regular messages and channel posts
+    bot.command("giveaway", handleGiveawayCommand);
+    bot.on('channel_post', (ctx, next) => {
+      if (ctx.channelPost?.text?.startsWith('/giveaway')) {
+        return handleGiveawayCommand(ctx);
+      }
+      return next();
     });
 
     // Add command for entering giveaways
