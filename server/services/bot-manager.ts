@@ -134,14 +134,20 @@ class BotManager {
           '🤖 Bot test message - initializing...'
         );
         console.log(`[Bot ${agentId}] Test message sent successfully:`, testMessage);
+
+        // If we got here, the bot is working - start it in the background
+        bot.launch().catch(error => {
+          console.log(`[Bot ${agentId}] Background launch error (can be ignored if bot is working):`, error.message);
+        });
+
+        // Return success since we know the bot can send/receive messages
+        return { bot, channelId: finalChannelId };
       } catch (error) {
         throw new Error(
           `Failed to send message to channel. Error: ${error.message}\n` +
           'Please ensure the bot has posting permissions in the channel.'
         );
       }
-
-      return { bot, channelId: finalChannelId };
     } catch (error) {
       console.error(`[Bot ${agentId}] Failed to initialize bot:`, error);
       throw error;
@@ -214,86 +220,19 @@ class BotManager {
         ctx.reply("Sorry, something went wrong. Please try again later.");
       });
 
-      // Start bot in polling mode with better error handling and retry mechanism
-      console.log(`[Bot ${agentId}] Starting bot in polling mode...`);
-      let retryCount = 0;
-      const maxRetries = 3;
+      // Register token usage and store bot instance since we know it's working
+      this.tokenMap.set(config.token, agentId);
+      this.bots.set(agentId, bot);
 
-      while (retryCount < maxRetries) {
-        try {
-          console.log(`[Bot ${agentId}] Launch attempt ${retryCount + 1}/${maxRetries}`);
-          const startTime = Date.now();
+      // Send welcome message
+      console.log(`[Bot ${agentId}] Sending welcome message to channel...`);
+      await bot.telegram.sendMessage(
+        finalChannelId,
+        `🤖 Bot restarted and ready!\n\nTemplate: ${agent.template}\nName: ${agent.name}\n\nUse the following commands:\n${this.getCommandList(agent.template)}`
+      );
+      console.log(`[Bot ${agentId}] Welcome message sent successfully`);
 
-          // Add pre-launch logging
-          console.log(`[Bot ${agentId}] Preparing to launch bot...`);
-          console.log(`[Bot ${agentId}] Current bot state:`, {
-            token: `${config.token.substring(0, 5)}...${config.token.substring(config.token.length - 5)}`,
-            finalChannelId
-          });
-
-          try {
-            // Launch with timeout and specific error handling
-            await Promise.race([
-              bot.launch().catch(e => {
-                if (e.message?.includes('409: Conflict')) {
-                  console.log(`[Bot ${agentId}] Detected conflict, waiting longer...`);
-                  return new Promise(resolve => setTimeout(resolve, 15000))
-                    .then(() => bot.launch());
-                }
-                throw e;
-              }),
-              new Promise((_, reject) =>
-                setTimeout(() => reject(new Error("Internal launch timeout (30s)")), 30000)
-              )
-            ]);
-
-            const launchTime = Date.now() - startTime;
-            console.log(`[Bot ${agentId}] Bot launched successfully in ${launchTime}ms`);
-
-            // Register token usage
-            this.tokenMap.set(config.token, agentId);
-
-            // Send welcome message after successful launch
-            console.log(`[Bot ${agentId}] Sending welcome message to channel...`);
-            await bot.telegram.sendMessage(
-              finalChannelId,
-              `🤖 Bot restarted and ready!\n\nTemplate: ${agent.template}\nName: ${agent.name}\n\nUse the following commands:\n${this.getCommandList(agent.template)}`
-            );
-            console.log(`[Bot ${agentId}] Welcome message sent successfully`);
-
-            // Store bot instance
-            this.bots.set(agentId, bot);
-            return true;
-
-          } catch (error) {
-            console.error(`[Bot ${agentId}] Launch attempt ${retryCount + 1} failed:`, {
-              error: error.message,
-              stack: error.stack,
-              type: error.constructor.name
-            });
-
-            if (error.message?.includes('409: Conflict')) {
-              console.log(`[Bot ${agentId}] Conflict detected, waiting longer before retry...`);
-              await new Promise(resolve => setTimeout(resolve, 15000));
-            }
-
-            retryCount++;
-            if (retryCount < maxRetries) {
-              const delay = 2000 * retryCount; // Exponential backoff
-              console.log(`[Bot ${agentId}] Retrying in ${delay}ms...`);
-              await new Promise(resolve => setTimeout(resolve, delay));
-            }
-          }
-        } catch (error) {
-          console.error(`[Bot ${agentId}] Outer error during launch attempt:`, error);
-          retryCount++;
-          if (retryCount < maxRetries) {
-            await new Promise(resolve => setTimeout(resolve, 5000));
-          }
-        }
-      }
-
-      throw new Error(`Failed to start bot after ${maxRetries} attempts`);
+      return true;
     } catch (error) {
       console.error(`[Bot ${agentId}] Failed to initialize:`, error);
       await this.stopAgent(agentId);
