@@ -9,11 +9,33 @@ import { botManager } from "./services/bot-manager";
 export function registerRoutes(app: Express): Server {
   setupAuth(app);
 
-  // Create new agent
+  // Update the POST /api/agents route to include token validation
   app.post("/api/agents", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
 
     try {
+      // Check if token is already in use
+      if (req.body.platform === "telegram") {
+        const token = req.body.platformConfig?.token;
+        if (!token) {
+          return res.status(400).json({ error: "Missing Telegram bot token" });
+        }
+
+        const existingAgent = await db.query.agents.findFirst({
+          where: and(
+            eq(agents.platform, "telegram"),
+            eq(agents.active, true)
+          )
+        });
+
+        if (existingAgent && existingAgent.platformConfig.token === token) {
+          return res.status(400).json({ 
+            error: "Token already in use", 
+            message: "This Telegram bot token is already being used by another agent. Each agent needs its own unique bot token. Please create a new bot in Telegram and use its token." 
+          });
+        }
+      }
+
       const [agent] = await db
         .insert(agents)
         .values({
