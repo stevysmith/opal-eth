@@ -10,6 +10,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Loader2, MessageSquare, Award, BarChart3 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { apiRequest } from "@/lib/queryClient";
 
 // Define types for the enriched agent data
 interface Poll {
@@ -57,12 +58,12 @@ export default function AgentDetailsPage() {
     queryKey: ["/api/agents", agentId],
     queryFn: async () => {
       if (!agentId) throw new Error("No agent ID provided");
-      const response = await fetch(`/api/agents/${agentId}`);
+      const response = await apiRequest("GET", `/api/agents/${agentId}`);
+      const data = await response.json();
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to fetch agent");
+        throw new Error(data.error || "Failed to fetch agent");
       }
-      return response.json();
+      return data;
     },
     enabled: !!agentId,
   });
