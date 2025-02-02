@@ -10,18 +10,16 @@ import { giveawayPayoutService } from "../src/services/giveawayPayoutService";
 class BotManager {
   private bots: Map<number, Telegraf<Context<Update>>> = new Map();
   private jobs: Map<number, schedule.Job> = new Map();
-  private tokenMap: Map<string, number> = new Map(); // Track which agent is using which token
+  private tokenMap: Map<string, number> = new Map();
 
   async stopAgent(agentId: number) {
     try {
       console.log(`[Bot ${agentId}] Stopping bot...`);
       const bot = this.bots.get(agentId);
       if (bot) {
-        // First stop the bot
         await bot.stop();
         console.log(`[Bot ${agentId}] Bot stopped successfully`);
 
-        // Remove all jobs associated with this agent
         for (const [jobId, job] of this.jobs.entries()) {
           if (jobId === agentId) {
             job.cancel();
@@ -29,14 +27,12 @@ class BotManager {
           }
         }
 
-        // Remove token mapping
         for (const [token, id] of this.tokenMap.entries()) {
           if (id === agentId) {
             this.tokenMap.delete(token);
           }
         }
 
-        // Remove bot from the map
         this.bots.delete(agentId);
         console.log(`[Bot ${agentId}] Cleanup completed`);
         return true;
@@ -45,7 +41,6 @@ class BotManager {
       return false;
     } catch (error) {
       console.error(`[Bot ${agentId}] Error stopping bot:`, error);
-      // Still try to clean up
       this.bots.delete(agentId);
       throw error;
     }
@@ -56,7 +51,6 @@ class BotManager {
     if (existingAgentId) {
       console.log(`Found existing bot using token, stopping agent ${existingAgentId}...`);
       await this.stopAgent(existingAgentId);
-      // Increase wait time for Telegram API to fully clear the session
       await new Promise(resolve => setTimeout(resolve, 10000));
       console.log(`Waited for cleanup after stopping agent ${existingAgentId}`);
     }
@@ -71,7 +65,6 @@ class BotManager {
 
     const bot = new Telegraf(token);
 
-    // Add middleware for detailed logging of all updates
     bot.use(async (ctx, next) => {
       console.log(`[Bot ${agentId}] Received update:`, {
         type: ctx.updateType,
@@ -86,19 +79,16 @@ class BotManager {
       await next();
     });
 
-    // Test connection before proceeding
     try {
       console.log(`[Bot ${agentId}] Testing bot connection...`);
       const me = await bot.telegram.getMe();
       console.log(`[Bot ${agentId}] Bot info:`, me);
 
-      // Format channelId appropriately
       const formattedChannelId = channelId.startsWith('@') ? channelId : `@${channelId}`;
       console.log(`[Bot ${agentId}] Testing channel access for ${formattedChannelId}...`);
 
       let finalChannelId: string;
       try {
-        // First try with the @ format
         const chat = await bot.telegram.getChat(formattedChannelId);
         console.log(`[Bot ${agentId}] Successfully accessed channel:`, {
           id: chat.id,
@@ -128,7 +118,6 @@ class BotManager {
         }
       }
 
-      // Test message sending explicitly
       try {
         console.log(`[Bot ${agentId}] Testing message sending to channel ${finalChannelId}...`);
         const testMessage = await bot.telegram.sendMessage(
@@ -137,12 +126,10 @@ class BotManager {
         );
         console.log(`[Bot ${agentId}] Test message sent successfully:`, testMessage);
 
-        // If we got here, the bot is working - start it in the background
         bot.launch().catch(error => {
           console.log(`[Bot ${agentId}] Background launch error (can be ignored if bot is working):`, error.message);
         });
 
-        // Return success since we know the bot can send/receive messages
         return { bot, channelId: finalChannelId };
       } catch (error) {
         throw new Error(
@@ -158,10 +145,8 @@ class BotManager {
 
   async initializeAgent(agentId: number) {
     try {
-      // Stop any existing bot first
       console.log(`[Bot ${agentId}] Stopping existing bot instance if any...`);
       await this.stopAgent(agentId);
-      // Increase wait time for cleanup
       await new Promise(resolve => setTimeout(resolve, 5000));
 
       console.log(`[Bot ${agentId}] Initializing new agent...`);
@@ -181,21 +166,17 @@ class BotManager {
         throw new Error("Missing Telegram bot token");
       }
 
-      // Stop any other bot using this token and wait for cleanup
       await this.stopBotWithToken(config.token);
 
-      // Initialize bot with more detailed error handling
       const { bot, channelId: finalChannelId } = await this.initializeBotInstance(
         agentId,
         config.token,
         config.channelId
       );
 
-      // Set up commands
       console.log(`[Bot ${agentId}] Setting up command handlers...`);
 
-       // Register basic message handler first
-       bot.on('message', (ctx) => {
+      bot.on('message', (ctx) => {
         console.log(`[Bot ${agentId}] Basic message handler received:`, {
           text: ctx.message?.text,
           from: ctx.from,
@@ -212,7 +193,6 @@ class BotManager {
         ctx.reply(`Available commands:\n${this.getCommandList(agent.template)}`);
       });
 
-      // Set up template-specific commands
       switch (agent.template) {
         case "poll":
           this.setupPollCommands(bot, agentId);
@@ -225,17 +205,14 @@ class BotManager {
           break;
       }
 
-      // Add error handler for unhandled errors
       bot.catch((error, ctx) => {
         console.error(`[Bot ${agentId}] Unhandled error:`, error);
         ctx.reply("Sorry, something went wrong. Please try again later.");
       });
 
-      // Register token usage and store bot instance since we know it's working
       this.tokenMap.set(config.token, agentId);
       this.bots.set(agentId, bot);
 
-      // Send welcome message
       console.log(`[Bot ${agentId}] Sending welcome message to channel...`);
       await bot.telegram.sendMessage(
         finalChannelId,
@@ -265,15 +242,13 @@ class BotManager {
   }
 
   private setupPollCommands(bot: Telegraf<Context<Update>>, agentId: number) {
-    // Handle both message and channel_post commands
     const handlePollCommand = async (ctx: Context) => {
       try {
         console.log(`[Bot ${agentId}] Processing poll command. Full message:`, ctx.message || ctx.channelPost);
         const text = ctx.message?.text || ctx.channelPost?.text || '';
-        const message = text.substring(6).trim(); // Remove '/poll ' and trim
+        const message = text.substring(6).trim();
         console.log(`[Bot ${agentId}] Extracted message:`, message);
 
-        // Find the question part (everything up to the first [)
         const questionMatch = message.match(/"([^"]+)"/);
         if (!questionMatch) {
           console.log(`[Bot ${agentId}] No valid question found in format`);
@@ -288,10 +263,9 @@ class BotManager {
           return ctx.reply("Invalid format. Use: /poll \"Question\" [\"Option1\",\"Option2\"]");
         }
 
-        // Clean up the options string
         const optionsStr = optionsMatch[1]
-          .replace(/,\s*]/g, '') // Remove trailing commas
-          .replace(/\s+/g, ' ') // Normalize whitespace
+          .replace(/,\s*]/g, '')
+          .replace(/\s+/g, ' ')
           .trim();
 
         console.log(`[Bot ${agentId}] Cleaned options string:`, optionsStr);
@@ -314,7 +288,7 @@ class BotManager {
         }
 
         const endTime = new Date();
-        endTime.setHours(endTime.getHours() + 24); // 24 hour polls
+        endTime.setHours(endTime.getHours() + 24);
 
         console.log(`[Bot ${agentId}] Creating poll in database:`, {
           question,
@@ -332,7 +306,6 @@ class BotManager {
 
         console.log(`[Bot ${agentId}] Poll created:`, poll);
 
-        // Send poll message
         const optionsMessage = options
           .map((opt: string, i: number) => `${i + 1}. ${opt}`)
           .join("\n");
@@ -343,7 +316,6 @@ class BotManager {
 
         console.log(`[Bot ${agentId}] Poll message sent:`, response);
 
-        // Schedule poll end
         this.jobs.set(poll.id, schedule.scheduleJob(endTime, async () => {
           try {
             const results = await db
@@ -374,7 +346,6 @@ class BotManager {
       }
     };
 
-    // Register command handlers for both regular messages and channel posts
     bot.command("poll", handlePollCommand);
     bot.on('channel_post', (ctx, next) => {
       if (ctx.channelPost?.text?.startsWith('/poll')) {
@@ -434,134 +405,25 @@ class BotManager {
     });
   }
 
-    private setupGiveawayCommands = (bot: Telegraf<Context<Update>>, agentId: number) => {
-      console.log(`[Bot ${agentId}] Setting up giveaway commands`);
+  private setupGiveawayCommands = (bot: Telegraf<Context<Update>>, agentId: number) => {
+    console.log(`[Bot ${agentId}] Setting up giveaway commands`);
 
-      // Add explicit enter command handler
-      bot.command('enter', async (ctx) => {
-        console.log(`[Bot ${agentId}] Enter command received:`, {
-          text: ctx.message?.text,
-          from: ctx.from,
-          chat: ctx.chat
-        });
-
-        try {
-          if (!ctx.message?.text) {
-            console.log(`[Bot ${agentId}] No message text found`);
-            return ctx.reply('Please send a valid command');
-          }
-
-          const parts = ctx.message.text.split(' ');
-          console.log(`[Bot ${agentId}] Command parts:`, parts);
-
-          if (parts.length !== 3) {
-            return ctx.reply(
-              "Please use the format: /enter <giveaway-id> <wallet-address>\n" +
-              "Example: /enter 7 0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
-            );
-          }
-
-          const [, giveawayIdStr, walletAddress] = parts;
-          const giveawayId = parseInt(giveawayIdStr);
-
-          console.log(`[Bot ${agentId}] Processing entry:`, {
-            giveawayId,
-            walletAddress,
-            userId: ctx.from?.id
-          });
-
-          if (isNaN(giveawayId)) {
-            return ctx.reply("Please provide a valid giveaway ID number");
-          }
-
-          if (!validateWalletAddress(walletAddress)) {
-            return ctx.reply("Please provide a valid Ethereum wallet address starting with 0x");
-          }
-
-          const [giveaway] = await db
-            .select()
-            .from(giveaways)
-            .where(eq(giveaways.id, giveawayId))
-            .limit(1);
-
-          if (!giveaway) {
-            return ctx.reply(`Giveaway #${giveawayId} not found`);
-          }
-
-          if (new Date() > giveaway.endTime) {
-            return ctx.reply(`Giveaway #${giveawayId} has already ended`);
-          }
-
-          if (!ctx.from?.id) {
-            return ctx.reply("Could not identify you. Please try again.");
-          }
-
-          const userId = ctx.from.id.toString();
-
-          // Check for existing entry
-          const [existingEntry] = await db
-            .select()
-            .from(giveawayEntries)
-            .where(and(
-              eq(giveawayEntries.giveawayId, giveaway.id),
-              eq(giveawayEntries.userId, userId)
-            ))
-            .limit(1);
-
-          if (existingEntry) {
-            return ctx.reply("You have already entered this giveaway!");
-          }
-
-          // Record the entry
-          await db.insert(giveawayEntries).values({
-            giveawayId: giveaway.id,
-            userId,
-            walletAddress,
-          });
-
-          return ctx.reply(
-            "🎉 Success! You've been entered into the giveaway!\n\n" +
-            `Prize: ${giveaway.prize}\n` +
-            `Your wallet: ${walletAddress}\n\n` +
-            "Good luck! Winners will be announced in the channel."
-          );
-
-        } catch (error) {
-          console.error(`[Bot ${agentId}] Error processing entry:`, error);
-          return ctx.reply("Sorry, something went wrong. Please try again.");
-        }
+    bot.on('message', (ctx) => {
+      console.log(`[Bot ${agentId}] Message received:`, {
+        text: ctx.message?.text,
+        from: ctx.from?.id,
+        chat: ctx.chat?.id
       });
-
-      // Add catch-all message handler for debugging
-      bot.on('message', (ctx) => {
-        console.log(`[Bot ${agentId}] Received message:`, {
-          text: ctx.message?.text,
-          type: ctx.message?.text?.startsWith('/') ? 'command' : 'message',
-          from: ctx.from?.id,
-          chat: ctx.chat?.id
-        });
-      });
-
-          // Add middleware for logging all updates
-          bot.use(async (ctx, next) => {
-            console.log(`[Bot ${agentId}] Received update:`, {
-              type: ctx.updateType,
-              from: ctx.from,
-              chat: ctx.chat,
-              text: ctx.message?.text || ctx.channelPost?.text,
-            });
-            await next();
-          });
+    });
 
     const handleGiveawayCommand = async (ctx: Context) => {
       try {
         const text = ctx.message?.text || ctx.channelPost?.text || '';
         console.log(`[Bot ${agentId}] Processing giveaway command. Full message:`, text);
 
-        const message = text.substring(9).trim(); // Remove '/giveaway '
+        const message = text.substring(9).trim();
         console.log(`[Bot ${agentId}] Parsed command text:`, message);
 
-        // More flexible regex to handle various formats
         const match = message.match(/^(.*?)\s+in\s+(\d+)\s*(mins?|minutes?|hours?|h)$/i);
         console.log(`[Bot ${agentId}] Regex match result:`, match);
 
@@ -577,17 +439,11 @@ class BotManager {
         }
 
         const [, prize, amount, unit] = match;
-        console.log(`[Bot ${agentId}] Parsed giveaway:`, { prize, amount, unit });
-
-        // Convert duration to hours
         const isMinutes = unit.toLowerCase().startsWith('min') || unit.toLowerCase() === 'm';
         const durationHours = isMinutes ? parseInt(amount) / 60 : parseInt(amount);
         const endTime = new Date();
         endTime.setHours(endTime.getHours() + durationHours);
 
-        console.log(`[Bot ${agentId}] Creating giveaway with duration:`, durationHours, 'hours');
-
-        // Create the giveaway
         const [giveaway] = await db.insert(giveaways).values({
           agentId,
           prize: prize.trim(),
@@ -595,14 +451,8 @@ class BotManager {
           endTime,
         }).returning();
 
-        console.log(`[Bot ${agentId}] Created giveaway:`, giveaway);
-
-        // Send confirmation message to the channel
-        const chatId = ctx.chat?.id.toString();
-        console.log(`[Bot ${agentId}] Sending confirmation to chat:`, chatId);
         const me = await bot.telegram.getMe();
-        const response = await bot.telegram.sendMessage(
-          chatId!,
+         const response = await ctx.reply(
           `🎉 New Giveaway!\n\n` +
           `Prize: ${prize.trim()}\n` +
           `Duration: ${durationHours < 1 ? `${Math.round(durationHours * 60)} minutes` : `${durationHours} hours`}\n\n` +
@@ -615,7 +465,7 @@ class BotManager {
 
         console.log(`[Bot ${agentId}] Sent confirmation message:`, response);
 
-        // Schedule end of giveaway
+
         this.jobs.set(giveaway.id, schedule.scheduleJob(endTime, async () => {
           try {
             const entries = await db
@@ -624,76 +474,141 @@ class BotManager {
               .where(eq(giveawayEntries.giveawayId, giveaway.id));
 
             if (entries.length === 0) {
-              await bot.telegram.sendMessage(chatId!, `Giveaway for "${prize}" ended with no participants!`);
+              await ctx.reply(`Giveaway for "${prize}" ended with no participants!`);
               return;
             }
 
-            // Pick random winner
             const winner = entries[Math.floor(Math.random() * entries.length)];
-
             try {
-              // Process the winner using giveawayPayoutService
-              const payoutResult = await giveawayPayoutService.processGiveawayWinner(giveaway.id, winner.userId);
-
-              // Send success message with transaction details
-              await bot.telegram.sendMessage(
-                chatId!,
-                `🎉 Giveaway Ended!\n\n` +
-                `Prize: ${prize}\n` +
-                `Winner: @${winner.userId}\n` +
-                `💰 USDC Payment Sent!\n` +
-                `Amount: ${payoutResult.amount} USDC\n` +
-                `Transaction: ${payoutResult.txHash}\n\n` +
-                `Congratulations!`
-              );
+                const payoutResult = await giveawayPayoutService.processGiveawayWinner(giveaway.id, winner.userId);
+                await ctx.reply(
+                  `🎉 Giveaway Ended!\n\n` +
+                  `Prize: ${prize}\n` +
+                  `Winner: @${winner.userId}\n` +
+                  `💰 USDC Payment Sent!\n` +
+                  `Amount: ${payoutResult.amount} USDC\n` +
+                  `Transaction: ${payoutResult.txHash}\n\n` +
+                  `Congratulations!`
+                );
             } catch (error) {
               console.error(`[Bot ${agentId}] Error processing payout:`, error);
+               await db
+                  .update(giveaways)
+                  .set({ winnerId: winner.userId })
+                  .where(eq(giveaways.id, giveaway.id));
 
-              // Still update giveaway with winner
-              await db
-                .update(giveaways)
-                .set({ winnerId: winner.userId })
-                .where(eq(giveaways.id, giveaway.id));
-
-              // Send message indicating payout issue
-              await bot.telegram.sendMessage(
-                chatId!,
-                `🎉 Giveaway Ended!\n\n` +
-                `Prize: ${prize}\n` +
-                `Winner: @${winner.userId}\n` +
-                `⚠️ Note: ${error instanceof Error ? error.message : 'Unknown error'}\n\n` +
-                `Congratulations to the winner! Our team will handle the payout manually.`
-              );
+                await ctx.reply(
+                  `🎉 Giveaway Ended!\n\n` +
+                  `Prize: ${prize}\n` +
+                  `Winner: @${winner.userId}\n` +
+                  `⚠️ Note: ${error instanceof Error ? error.message : 'Unknown error'}\n\n` +
+                  `Congratulations to the winner! Our team will handle the payout manually.`
+                );
             }
           } catch (error) {
             console.error(`[Bot ${agentId}] Error ending giveaway:`, error);
-            await bot.telegram.sendMessage(chatId!, 'An error occurred while ending the giveaway.');
+            await ctx.reply('An error occurred while ending the giveaway.');
           }
         }));
       } catch (error) {
-        console.error(`[Bot ${agentId}] Error handling giveaway command:`, error);
-        ctx.reply("Failed to create giveaway. Please try again.");
+        console.error(`[Bot ${agentId}] Error creating giveaway:`, error);
+        return ctx.reply("Failed to create giveaway. Please try again.");
       }
     };
 
-    const validateWalletAddress = (address: string): boolean => {
-      // Basic Ethereum address validation
-      return /^0x[a-fA-F0-9]{40}$/.test(address);
-    };
+    bot.hears(/^\/enter/, async (ctx) => {
+      console.log(`[Bot ${agentId}] Enter command triggered:`, {
+        text: ctx.message?.text,
+        from: ctx.from?.id,
+        chat: ctx.chat?.id
+      });
 
+      try {
+        const text = ctx.message?.text || '';
+        const parts = text.split(' ');
 
+        if (parts.length !== 3) {
+          return ctx.reply(
+            "Please provide both the giveaway ID and your wallet address.\n" +
+            "Format: /enter <giveaway-id> <wallet-address>\n" +
+            "Example: /enter 8 0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
+          );
+        }
+
+        const [, giveawayIdStr, walletAddress] = parts;
+        const giveawayId = parseInt(giveawayIdStr);
+
+        if (isNaN(giveawayId)) {
+          return ctx.reply("Please provide a valid giveaway ID number");
+        }
+
+         if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
+          return ctx.reply("Please provide a valid Ethereum wallet address starting with 0x");
+        }
+
+        const [giveaway] = await db
+          .select()
+          .from(giveaways)
+          .where(eq(giveaways.id, giveawayId))
+          .limit(1);
+
+        if (!giveaway) {
+          return ctx.reply(`Giveaway #${giveawayId} not found`);
+        }
+
+        if (new Date() > giveaway.endTime) {
+          return ctx.reply(`Giveaway #${giveawayId} has already ended`);
+        }
+
+        if (!ctx.from?.id) {
+          return ctx.reply("Could not identify you. Please try again.");
+        }
+
+        const userId = ctx.from.id.toString();
+
+        const [existingEntry] = await db
+          .select()
+          .from(giveawayEntries)
+          .where(and(
+            eq(giveawayEntries.giveawayId, giveaway.id),
+            eq(giveawayEntries.userId, userId)
+          ))
+          .limit(1);
+
+        if (existingEntry) {
+          return ctx.reply("You have already entered this giveaway!");
+        }
+
+        await db.insert(giveawayEntries).values({
+          giveawayId: giveaway.id,
+          userId,
+          walletAddress,
+        });
+
+        return ctx.reply(
+          "🎉 Success! You've been entered into the giveaway!\n\n" +
+          `Prize: ${giveaway.prize}\n` +
+          `Your wallet: ${walletAddress}\n\n` +
+          "Good luck! Winners will be announced in the channel."
+        );
+
+      } catch (error) {
+        console.error(`[Bot ${agentId}] Error processing entry:`, error);
+        return ctx.reply("Sorry, something went wrong. Please try again.");
+      }
+    });
+
+    bot.command("giveaway", handleGiveawayCommand);
     bot.on('channel_post', (ctx, next) => {
       if (ctx.channelPost?.text?.startsWith('/giveaway')) {
         return handleGiveawayCommand(ctx);
       }
       return next();
     });
-    bot.command("giveaway", handleGiveawayCommand);
-
   }
 
+
   private setupQACommands(bot: Telegraf<Context<Update>>, agentId: number) {
-    // For Q&A, we'll just log the questions for now
     bot.on("text", (ctx) => {
       const message = ctx.message.text;
       console.log(`Q&A Bot ${agentId} received: ${message}`);
