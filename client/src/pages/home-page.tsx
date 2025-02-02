@@ -15,20 +15,31 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useState } from "react";
 
 export default function HomePage() {
   const { user, logoutMutation } = useAuth();
   const { toast } = useToast();
   const { data: agents } = useQuery<SelectAgent[]>({ queryKey: ["/api/agents"] });
+  const [pendingAgents, setPendingAgents] = useState<Set<number>>(new Set());
 
   const toggleMutation = useMutation({
     mutationFn: async (agentId: number) => {
-      const response = await apiRequest("POST", `/api/agents/${agentId}/toggle`);
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.details || error.message || "Failed to toggle agent");
+      setPendingAgents(prev => new Set(prev).add(agentId));
+      try {
+        const response = await apiRequest("POST", `/api/agents/${agentId}/toggle`);
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.details || error.message || "Failed to toggle agent");
+        }
+        return response.json();
+      } finally {
+        setPendingAgents(prev => {
+          const next = new Set(prev);
+          next.delete(agentId);
+          return next;
+        });
       }
-      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/agents"] });
@@ -118,9 +129,9 @@ export default function HomePage() {
                     variant="outline"
                     size="sm"
                     onClick={() => toggleMutation.mutate(agent.id)}
-                    disabled={toggleMutation.isPending}
+                    disabled={pendingAgents.has(agent.id)}
                   >
-                    {toggleMutation.isPending && (
+                    {pendingAgents.has(agent.id) && (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     )}
                     {agent.active ? "Stop" : "Start"}

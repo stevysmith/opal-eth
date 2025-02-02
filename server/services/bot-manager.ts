@@ -5,7 +5,7 @@ import { agents, polls, votes, giveaways, giveawayEntries } from "@db/schema";
 import { eq } from "drizzle-orm";
 import schedule from "node-schedule";
 
-const INIT_TIMEOUT = 30000; // Increase timeout to 30 seconds for bot initialization
+const INIT_TIMEOUT = 15000; // Reduce timeout to 15 seconds for bot initialization
 
 class BotManager {
   private bots: Map<number, Telegraf<Context<Update>>> = new Map();
@@ -57,7 +57,23 @@ class BotManager {
               `🤖 Bot initialized successfully!\n\nTemplate: ${agent.template}\nName: ${agent.name}\n\nUse the following commands:\n${this.getCommandList(agent.template)}`
             );
             console.log(`Bot ${agentId} successfully connected to channel ${config.channelId}`);
-            break;
+
+            // Launch bot with timeout
+            try {
+              await Promise.race([
+                bot.launch(),
+                new Promise((_, reject) => 
+                  setTimeout(() => reject(new Error("Bot launch timed out")), INIT_TIMEOUT)
+                )
+              ]);
+
+              this.bots.set(agentId, bot);
+              return true;
+            } catch (error) {
+              console.error(`Failed to launch bot ${agentId}:`, error);
+              bot.stop();
+              throw error;
+            }
           } catch (error) {
             retryCount++;
             if (retryCount === maxRetries) {
@@ -70,30 +86,13 @@ class BotManager {
             await new Promise(resolve => setTimeout(resolve, 2000));
           }
         }
-
-        // Launch bot with increased timeout and better error handling
-        try {
-          const launchPromise = bot.launch();
-          const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error(
-              `Bot initialization timed out after ${INIT_TIMEOUT/1000} seconds. Please try again or check your bot token.`
-            )), INIT_TIMEOUT);
-          });
-
-          await Promise.race([launchPromise, timeoutPromise]);
-          this.bots.set(agentId, bot);
-          return bot;
-        } catch (error) {
-          console.error(`Failed to initialize bot ${agentId}:`, error);
-          // Clean up the bot instance if launch fails
-          bot.stop();
-          throw error;
-        }
       }
 
-      return this.bots.get(agentId)!;
+      return this.bots.has(agentId);
     } catch (error) {
       console.error(`Error in initializeAgent for agent ${agentId}:`, error);
+      // Ensure bot is cleaned up on initialization failure
+      await this.stopAgent(agentId);
       throw error;
     }
   }
@@ -312,18 +311,20 @@ class BotManager {
   async stopAgent(agentId: number) {
     const bot = this.bots.get(agentId);
     if (bot) {
-      await bot.stop();
+      try {
+        await bot.stop();
+      } catch (error) {
+        console.error(`Error stopping bot ${agentId}:`, error);
+      }
       this.bots.delete(agentId);
     }
   }
 
   async stopAll() {
-    // Use Array.from to convert Map entries to an array for iteration
     for (const [agentId] of Array.from(this.bots.entries())) {
       await this.stopAgent(agentId);
     }
 
-    // Clear all scheduled jobs
     for (const job of Array.from(this.jobs.values())) {
       job.cancel();
     }
