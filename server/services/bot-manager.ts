@@ -1,12 +1,11 @@
 import { Telegraf, Context } from "telegraf";
-import { Update } from "telegraf/typings/core/types/typegram";
 import { db } from "@db";
 import { agents, polls, votes, giveaways, giveawayEntries } from "@db/schema";
 import { eq, and } from "drizzle-orm";
 import schedule from "node-schedule";
 
 class BotManager {
-  private bots: Map<number, Telegraf<Context<Update>>> = new Map();
+  private bots: Map<number, Telegraf> = new Map();
   private jobs: Map<number, schedule.Job> = new Map();
 
   async stopAgent(agentId: number) {
@@ -17,10 +16,10 @@ class BotManager {
         await bot.stop();
         console.log(`[Bot ${agentId}] Bot stopped successfully`);
         // Remove all jobs associated with this agent
-        for (const [jobId, job] of this.jobs.entries()) {
+        for (const job of Array.from(this.jobs.values())) {
           job.cancel();
-          this.jobs.delete(jobId);
         }
+        this.jobs.clear();
         // Wait a bit after stopping to ensure cleanup
         await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (error) {
@@ -53,6 +52,7 @@ class BotManager {
 
       // Initialize new bot
       const bot = new Telegraf(config.token);
+      console.log(`[Bot ${agentId}] Bot instance created with token`);
 
       // Add middleware for logging all updates
       bot.use(async (ctx, next) => {
@@ -93,23 +93,22 @@ class BotManager {
         ctx.reply("Sorry, something went wrong. Please try again later.");
       });
 
-      // Start bot in polling mode with retries
-      console.log(`[Bot ${agentId}] Starting bot in polling mode...`);
+      // Start bot with retries
+      console.log(`[Bot ${agentId}] Starting bot...`);
       try {
         for (let attempt = 1; attempt <= 3; attempt++) {
           try {
+            console.log(`[Bot ${agentId}] Launch attempt ${attempt}`);
             await bot.launch({
               dropPendingUpdates: true,
-              polling: {
-                timeout: 30,
-                limit: 100,
-              },
+              allowedUpdates: ["message", "callback_query"],
             });
-            console.log(`[Bot ${agentId}] Bot launched successfully`);
+            console.log(`[Bot ${agentId}] Bot launched successfully on attempt ${attempt}`);
             break;
           } catch (error) {
-            if (error.message.includes('409: Conflict')) {
-              console.log(`[Bot ${agentId}] Launch attempt ${attempt} failed with conflict, retrying after delay...`);
+            console.error(`[Bot ${agentId}] Launch attempt ${attempt} failed:`, error);
+            if (error instanceof Error && error.message?.includes('409: Conflict')) {
+              console.log(`[Bot ${agentId}] Conflict detected, retrying after delay...`);
               await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
               continue;
             }
@@ -117,12 +116,13 @@ class BotManager {
           }
         }
       } catch (error) {
-        console.error(`[Bot ${agentId}] Failed to launch bot:`, error);
+        console.error(`[Bot ${agentId}] All launch attempts failed:`, error);
         throw error;
       }
 
       // Test channel connection
       try {
+        console.log(`[Bot ${agentId}] Testing channel connection to ${config.channelId}...`);
         await bot.telegram.sendMessage(
           config.channelId,
           `🤖 Bot restarted and ready!\n\nTemplate: ${agent.template}\nName: ${agent.name}\n\nUse the following commands:\n${this.getCommandList(agent.template)}`
@@ -156,7 +156,7 @@ class BotManager {
     }
   }
 
-  private setupPollCommands(bot: Telegraf<Context<Update>>, agentId: number) {
+  private setupPollCommands(bot: Telegraf<Context>, agentId: number) {
     // Add middleware for logging all messages
     bot.use(async (ctx, next) => {
       console.log(`[Bot ${agentId}] Received update:`, {
@@ -311,7 +311,7 @@ class BotManager {
     });
   }
 
-  private setupGiveawayCommands(bot: Telegraf<Context<Update>>, agentId: number) {
+  private setupGiveawayCommands(bot: Telegraf<Context>, agentId: number) {
     console.log(`[Bot ${agentId}] Setting up giveaway commands`);
 
     bot.command("giveaway", async (ctx) => {
@@ -459,7 +459,7 @@ class BotManager {
     });
   }
 
-  private setupQACommands(bot: Telegraf<Context<Update>>, agentId: number) {
+  private setupQACommands(bot: Telegraf<Context>, agentId: number) {
     // For Q&A, we'll just log the questions for now
     bot.on("text", (ctx) => {
       const message = ctx.message.text;
