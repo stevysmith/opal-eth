@@ -1,7 +1,7 @@
 
 import { AgentKit } from '@coinbase/agentkit';
-import { CdpWalletProvider } from '@coinbase/agentkit/dist/wallet-providers';
-import { walletActionProvider, erc20ActionProvider } from '@coinbase/agentkit/dist/action-providers';
+import { WalletProvider, CdpWalletProvider } from '@coinbase/agentkit/wallet-providers';
+import { ActionProvider, walletActionProvider, erc20ActionProvider } from '@coinbase/agentkit/action-providers';
 import { db } from "@db";
 import { mpcWallets } from "@db/schema";
 import { eq } from "drizzle-orm";
@@ -37,7 +37,7 @@ class CoinbaseService {
   async createMpcWallet(agentId: number): Promise<string> {
     try {
       const wallet = await this.agentKit.getActions()[0].createWallet();
-
+      
       await db.insert(mpcWallets).values({
         agentId,
         walletId: wallet.id,
@@ -52,19 +52,24 @@ class CoinbaseService {
   }
 
   async getWalletForAgent(agentId: number): Promise<string | null> {
-    const [wallet] = await db
-      .select()
-      .from(mpcWallets)
-      .where(eq(mpcWallets.agentId, agentId))
-      .limit(1);
+    try {
+      const [wallet] = await db
+        .select()
+        .from(mpcWallets)
+        .where(eq(mpcWallets.agentId, agentId))
+        .limit(1);
 
-    return wallet?.walletId || null;
+      return wallet?.walletId || null;
+    } catch (error) {
+      console.error('Error getting wallet for agent:', error);
+      throw new Error('Failed to get wallet for agent');
+    }
   }
 
   async getWalletBalance(walletId: string): Promise<string> {
     try {
       const wallet = await this.agentKit.getActions()[0].getWallet(walletId);
-      const balance = await wallet.balance('USDC');
+      const balance = await wallet.getBalance('USDC');
       return balance.toString();
     } catch (error) {
       console.error('Error getting wallet balance:', error);
