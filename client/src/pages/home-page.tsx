@@ -25,6 +25,11 @@ export default function HomePage() {
   const [pendingAgents, setPendingAgents] = useState<Set<number>>(new Set());
   const [, navigate] = useLocation();
 
+  const handleViewDetails = (agentId: number) => {
+    console.log(`Navigating to agent details: ${agentId}`);
+    navigate(`/agents/${agentId}`);
+  };
+
   const toggleMutation = useMutation({
     mutationFn: async (agentId: number) => {
       setPendingAgents(prev => new Set(prev).add(agentId));
@@ -131,7 +136,7 @@ export default function HomePage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => navigate(`/agents/${agent.id}`)}
+                    onClick={() => handleViewDetails(agent.id)}
                   >
                     View Details
                     <ArrowRight className="w-4 h-4 ml-2" />
