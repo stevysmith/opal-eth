@@ -1,7 +1,5 @@
 
-import { AgentKit } from '@coinbase/agentkit';
-import { WalletProvider, CdpWalletProvider } from '@coinbase/agentkit';
-import { walletActionProvider, erc20ActionProvider } from '@coinbase/agentkit';
+import { AgentKit, walletActionProvider, erc20ActionProvider } from '@coinbase/agentkit';
 import { db } from "@db";
 import { mpcWallets } from "@db/schema";
 import { eq } from "drizzle-orm";
@@ -29,20 +27,18 @@ class CoinbaseService {
       cdpApiKeyPrivateKey: this.config.apiKeyPrivateKey,
       actionProviders: [
         walletActionProvider(),
-        erc20ActionProvider(),
+        erc20ActionProvider()
       ],
     });
   }
 
   async createMpcWallet(agentId: number): Promise<string> {
     try {
-      const actions = await this.agentKit.getActions();
-      const walletAction = actions.find(action => action.type === 'wallet');
-      if (!walletAction) {
-        throw new Error('Wallet action provider not found');
+      const wallet = await this.agentKit.getActions().find(action => action.type === 'wallet')?.createWallet();
+      if (!wallet) {
+        throw new Error('Failed to create wallet');
       }
-      
-      const wallet = await walletAction.createWallet();
+
       await db.insert(mpcWallets).values({
         agentId,
         walletId: wallet.id,
@@ -73,7 +69,11 @@ class CoinbaseService {
 
   async getWalletBalance(walletId: string): Promise<string> {
     try {
-      const wallet = await this.agentKit.getActions()[0].getWallet(walletId);
+      const walletAction = this.agentKit.getActions().find(action => action.type === 'wallet');
+      if (!walletAction) {
+        throw new Error('Wallet action not found');
+      }
+      const wallet = await walletAction.getWallet(walletId);
       const balance = await wallet.getBalance('USDC');
       return balance.toString();
     } catch (error) {
@@ -84,7 +84,11 @@ class CoinbaseService {
 
   async sendUsdc(fromWalletId: string, toAddress: string, amount: string): Promise<string> {
     try {
-      const wallet = await this.agentKit.getActions()[0].getWallet(fromWalletId);
+      const walletAction = this.agentKit.getActions().find(action => action.type === 'wallet');
+      if (!walletAction) {
+        throw new Error('Wallet action not found');
+      }
+      const wallet = await walletAction.getWallet(fromWalletId);
       const tx = await wallet.send({
         to: toAddress,
         amount,
