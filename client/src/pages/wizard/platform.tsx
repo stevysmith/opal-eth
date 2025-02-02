@@ -24,8 +24,12 @@ import { useWizard } from "@/hooks/use-wizard";
 
 const platformSchema = z.object({
   platform: z.enum(["telegram", "discord"]),
-  token: z.string().min(1),
-  channelId: z.string().min(1),
+  token: z.string().min(1, "Bot token is required")
+    .refine(
+      (token) => token.includes(":"),
+      "Invalid bot token format. It should contain a colon (:)"
+    ),
+  channelId: z.string().min(1, "Channel ID is required"),
 });
 
 export default function PlatformStep() {
@@ -35,7 +39,7 @@ export default function PlatformStep() {
   const form = useForm({
     resolver: zodResolver(platformSchema),
     defaultValues: {
-      platform: (formData.platform as "telegram" | "discord") || "telegram",
+      platform: formData.platform as "telegram" | "discord" || "telegram",
       token: formData.platformConfig?.token || "",
       channelId: formData.platformConfig?.channelId || "",
     },
@@ -57,7 +61,7 @@ export default function PlatformStep() {
       <div>
         <h2 className="text-2xl font-bold mb-2">Configure Platform</h2>
         <p className="text-muted-foreground">
-          Choose where your bot will operate and set up the connection
+          Configure where your bot will operate and set up the connection details
         </p>
       </div>
 
@@ -102,7 +106,7 @@ export default function PlatformStep() {
                   />
                 </FormControl>
                 <FormDescription>
-                  You can get this from BotFather
+                  Get this from @BotFather on Telegram. It should look like "123456789:ABCdefGHIjklmNOPQRstuvwxyz"
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -117,10 +121,13 @@ export default function PlatformStep() {
                 <FormLabel>Channel ID</FormLabel>
                 <FormControl>
                   <Input
-                    placeholder="Enter the channel ID"
+                    placeholder="Enter the channel ID or @username"
                     {...field}
                   />
                 </FormControl>
+                <FormDescription>
+                  Either use your channel's username (e.g., "@mychannel") or get the numeric ID by forwarding a message to @userinfobot
+                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -134,7 +141,7 @@ export default function PlatformStep() {
             >
               Back
             </Button>
-            <Button type="submit">Review</Button>
+            <Button type="submit">Continue</Button>
           </div>
         </form>
       </Form>
