@@ -240,43 +240,49 @@ class BotManager {
           endTime,
         });
 
-        const [giveaway] = await db.insert(giveaways).values({
-          agentId,
-          prize,
-          startTime: new Date(),
-          endTime,
-        }).returning();
+        // Wrap the database operations in a try-catch block
+        try {
+          const [giveaway] = await db.insert(giveaways).values({
+            agentId,
+            prize,
+            startTime: new Date(),
+            endTime,
+          }).returning();
 
-        console.log("Created giveaway:", giveaway);
-
-        await ctx.reply(
-          `🎉 New Giveaway!\n\nPrize: ${giveaway.prize}\nEnds in: ${durationHours < 1 ? `${Math.round(durationHours * 60)} minutes` : `${durationHours} hours`}\n\nEnter using: /enter ${giveaway.id}`
-        );
-
-        // Schedule giveaway end
-        this.jobs.set(giveaway.id, schedule.scheduleJob(endTime, async () => {
-          const entries = await db
-            .select()
-            .from(giveawayEntries)
-            .where(eq(giveawayEntries.giveawayId, giveaway.id));
-
-          if (entries.length === 0) {
-            await ctx.reply(`Giveaway for ${giveaway.prize} ended with no participants!`);
-            return;
-          }
-
-          // Pick random winner
-          const winner = entries[Math.floor(Math.random() * entries.length)];
-
-          await db
-            .update(giveaways)
-            .set({ winnerId: winner.userId })
-            .where(eq(giveaways.id, giveaway.id));
+          console.log("Successfully created giveaway in database:", giveaway);
 
           await ctx.reply(
-            `🎉 Giveaway Ended!\n\nPrize: ${giveaway.prize}\nWinner: @${winner.userId}\n\nCongratulations!`
+            `🎉 New Giveaway!\n\nPrize: ${giveaway.prize}\nEnds in: ${durationHours < 1 ? `${Math.round(durationHours * 60)} minutes` : `${durationHours} hours`}\n\nEnter using: /enter ${giveaway.id}`
           );
-        }));
+
+          // Schedule giveaway end
+          this.jobs.set(giveaway.id, schedule.scheduleJob(endTime, async () => {
+            const entries = await db
+              .select()
+              .from(giveawayEntries)
+              .where(eq(giveawayEntries.giveawayId, giveaway.id));
+
+            if (entries.length === 0) {
+              await ctx.reply(`Giveaway for ${giveaway.prize} ended with no participants!`);
+              return;
+            }
+
+            // Pick random winner
+            const winner = entries[Math.floor(Math.random() * entries.length)];
+
+            await db
+              .update(giveaways)
+              .set({ winnerId: winner.userId })
+              .where(eq(giveaways.id, giveaway.id));
+
+            await ctx.reply(
+              `🎉 Giveaway Ended!\n\nPrize: ${giveaway.prize}\nWinner: @${winner.userId}\n\nCongratulations!`
+            );
+          }));
+        } catch (dbError) {
+          console.error("Database error creating giveaway:", dbError);
+          throw dbError;
+        }
       } catch (error) {
         console.error("Error creating giveaway:", error);
         ctx.reply("Failed to create giveaway. Please try again.");

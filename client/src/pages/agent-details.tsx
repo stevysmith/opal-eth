@@ -126,6 +126,8 @@ function PollDetails({ polls }: { polls: Poll[] }) {
 }
 
 function GiveawayDetails({ giveaways }: { giveaways: Giveaway[] }) {
+  console.log("Rendering GiveawayDetails with giveaways:", giveaways);
+
   if (!giveaways || giveaways.length === 0) {
     return (
       <Card className="mt-6">
