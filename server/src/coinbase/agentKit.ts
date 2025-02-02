@@ -22,17 +22,37 @@ class CoinbaseService {
   }
 
   private async initializeAgentKit() {
-    const wallet = walletActionProvider();
-    wallet.type = 'wallet';
-    
-    const erc20 = erc20ActionProvider();
-    erc20.type = 'erc20';
-    
-    this.agentKit = await AgentKit.from({
-      cdpApiKeyName: this.config.apiKeyName,
-      cdpApiKeyPrivateKey: this.config.apiKeyPrivateKey,
-      actionProviders: [wallet, erc20],
-    });
+    try {
+      const wallet = walletActionProvider();
+      const erc20 = erc20ActionProvider();
+      
+      // Set action types using Object.defineProperty to ensure they are enumerable
+      Object.defineProperty(wallet, 'type', {
+        value: 'wallet',
+        enumerable: true,
+        configurable: true,
+        writable: true
+      });
+      
+      Object.defineProperty(erc20, 'type', {
+        value: 'erc20',
+        enumerable: true,
+        configurable: true,
+        writable: true
+      });
+
+      console.log('Initializing wallet action:', wallet);
+      console.log('Initializing erc20 action:', erc20);
+      
+      this.agentKit = await AgentKit.from({
+        cdpApiKeyName: this.config.apiKeyName,
+        cdpApiKeyPrivateKey: this.config.apiKeyPrivateKey,
+        actionProviders: [wallet, erc20],
+      });
+    } catch (error) {
+      console.error('Error initializing AgentKit:', error);
+      throw error;
+    }
   }
 
   async createMpcWallet(agentId: number): Promise<string> {
