@@ -21,22 +21,28 @@ export default function HomePage() {
   const { toast } = useToast();
   const { data: agents } = useQuery<SelectAgent[]>({ queryKey: ["/api/agents"] });
 
-  const toggleAgentMutation = useMutation({
-    mutationFn: async (agentId: number) => {
-      const response = await apiRequest("POST", `/api/agents/${agentId}/toggle`);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/agents"] });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
+  const createToggleMutation = (agentId: number) => 
+    useMutation({
+      mutationKey: [`toggleAgent-${agentId}`],
+      mutationFn: async () => {
+        const response = await apiRequest("POST", `/api/agents/${agentId}/toggle`);
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.details || error.message || "Failed to toggle agent");
+        }
+        return response.json();
+      },
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["/api/agents"] });
+      },
+      onError: (error: Error) => {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      },
+    });
 
   return (
     <div className="min-h-screen p-8">
@@ -60,71 +66,75 @@ export default function HomePage() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {agents?.map((agent) => (
-            <Card key={agent.id}>
-              <CardHeader>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <CardTitle>{agent.name}</CardTitle>
-                    <CardDescription className="flex items-center gap-2">
-                      {agent.template === "poll" && <BarChart3 className="w-4 h-4" />}
-                      {agent.template === "giveaway" && <Award className="w-4 h-4" />}
-                      {agent.template === "qa" && <MessageSquare className="w-4 h-4" />}
-                      {agent.template}
-                    </CardDescription>
-                  </div>
-                  <Badge variant={agent.active ? "default" : "secondary"}>
-                    {agent.active ? "Active" : "Inactive"}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="text-sm">
-                    <span className="font-medium">Platform:</span> {agent.platform}
-                  </div>
-                  <div className="text-sm">
-                    <span className="font-medium">Channel:</span>{" "}
-                    {(agent.platformConfig as { channelId: string })?.channelId}
-                  </div>
-                  <div className="text-sm">
-                    <span className="font-medium">Persona:</span>{" "}
-                    {agent.persona?.tone}
-                  </div>
-                </div>
-              </CardContent>
-              <CardFooter>
-                <div className="w-full flex justify-between items-center">
-                  {agent.template === "poll" && (
-                    <div className="text-sm text-muted-foreground">
-                      Use /poll to create a new poll
+          {agents?.map((agent) => {
+            const toggleMutation = createToggleMutation(agent.id);
+
+            return (
+              <Card key={agent.id}>
+                <CardHeader>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle>{agent.name}</CardTitle>
+                      <CardDescription className="flex items-center gap-2">
+                        {agent.template === "poll" && <BarChart3 className="w-4 h-4" />}
+                        {agent.template === "giveaway" && <Award className="w-4 h-4" />}
+                        {agent.template === "qa" && <MessageSquare className="w-4 h-4" />}
+                        {agent.template}
+                      </CardDescription>
                     </div>
-                  )}
-                  {agent.template === "giveaway" && (
-                    <div className="text-sm text-muted-foreground">
-                      Use /giveaway to start a giveaway
+                    <Badge variant={agent.active ? "default" : "secondary"}>
+                      {agent.active ? "Active" : "Inactive"}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <div className="text-sm">
+                      <span className="font-medium">Platform:</span> {agent.platform}
                     </div>
-                  )}
-                  {agent.template === "qa" && (
-                    <div className="text-sm text-muted-foreground">
-                      Send messages to start Q&A
+                    <div className="text-sm">
+                      <span className="font-medium">Channel:</span>{" "}
+                      {(agent.platformConfig as { channelId: string })?.channelId}
                     </div>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => toggleAgentMutation.mutate(agent.id)}
-                    disabled={toggleAgentMutation.isPending}
-                  >
-                    {toggleAgentMutation.isPending && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <div className="text-sm">
+                      <span className="font-medium">Persona:</span>{" "}
+                      {agent.persona?.tone}
+                    </div>
+                  </div>
+                </CardContent>
+                <CardFooter>
+                  <div className="w-full flex justify-between items-center">
+                    {agent.template === "poll" && (
+                      <div className="text-sm text-muted-foreground">
+                        Use /poll to create a new poll
+                      </div>
                     )}
-                    {agent.active ? "Stop" : "Start"}
-                  </Button>
-                </div>
-              </CardFooter>
-            </Card>
-          ))}
+                    {agent.template === "giveaway" && (
+                      <div className="text-sm text-muted-foreground">
+                        Use /giveaway to start a giveaway
+                      </div>
+                    )}
+                    {agent.template === "qa" && (
+                      <div className="text-sm text-muted-foreground">
+                        Send messages to start Q&A
+                      </div>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => toggleMutation.mutate()}
+                      disabled={toggleMutation.isPending}
+                    >
+                      {toggleMutation.isPending && (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      )}
+                      {agent.active ? "Stop" : "Start"}
+                    </Button>
+                  </div>
+                </CardFooter>
+              </Card>
+            );
+          })}
         </div>
 
         {agents?.length === 0 && (
