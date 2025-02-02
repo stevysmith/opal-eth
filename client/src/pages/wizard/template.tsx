@@ -24,11 +24,15 @@ const templates = [
     description: "Create polls and gather feedback from your community",
     icon: <BarChart3 className="h-5 w-5" />,
   },
-];
+] as const;
+
+type TemplateId = (typeof templates)[number]["id"];
 
 export default function TemplateStep() {
   const { formData, setFormData } = useWizard();
-  const [selected, setSelected] = useState<string>(formData.template || "");
+  const [selected, setSelected] = useState<TemplateId | "">(
+    (formData.template as TemplateId) || ""
+  );
   const [, navigate] = useLocation();
 
   const handleContinue = () => {
@@ -61,10 +65,7 @@ export default function TemplateStep() {
       </div>
 
       <div className="flex justify-end">
-        <Button
-          onClick={handleContinue}
-          disabled={!selected}
-        >
+        <Button onClick={handleContinue} disabled={!selected}>
           Continue
         </Button>
       </div>

@@ -1,18 +1,29 @@
 import { createContext, useContext, ReactNode, useState } from "react";
 import type { InsertAgent } from "@db/schema";
 
+type WizardData = Omit<InsertAgent, 'userId' | 'id' | 'createdAt'> & {
+  persona: {
+    description: string;
+    tone: string;
+  };
+  platformConfig: {
+    token: string;
+    channelId: string;
+  };
+};
+
 type WizardContextType = {
-  formData: Partial<InsertAgent>;
-  setFormData: (data: Partial<InsertAgent>) => void;
+  formData: Partial<WizardData>;
+  setFormData: (data: Partial<WizardData>) => void;
   clearForm: () => void;
 };
 
 const WizardContext = createContext<WizardContextType | null>(null);
 
 export function WizardProvider({ children }: { children: ReactNode }) {
-  const [formData, setFormDataState] = useState<Partial<InsertAgent>>({});
+  const [formData, setFormDataState] = useState<Partial<WizardData>>({});
 
-  const setFormData = (newData: Partial<InsertAgent>) => {
+  const setFormData = (newData: Partial<WizardData>) => {
     setFormDataState(prev => ({ ...prev, ...newData }));
   };
 
