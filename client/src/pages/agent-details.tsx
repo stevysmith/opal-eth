@@ -59,19 +59,19 @@ export default function AgentDetailsPage() {
     queryFn: async () => {
       if (!agentId) throw new Error("No agent ID provided");
       const response = await apiRequest("GET", `/api/agents/${agentId}`);
+      const data = await response.json();
+
+      // Log the received data for debugging
+      console.log("Received agent data:", data);
+
       if (!response.ok) {
-        const data = await response.json();
-        console.error("Failed to fetch agent:", data);
         throw new Error(data.error || "Failed to fetch agent");
       }
-      const data = await response.json();
+
       if (!data) {
         throw new Error("No data received");
       }
-      
-      // Log the received data for debugging
-      console.log("Received agent data:", data);
-      
+
       return data as EnrichedAgent;
     },
     enabled: !!agentId,
