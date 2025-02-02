@@ -54,6 +54,9 @@ class BotManager {
     if (existingAgentId) {
       console.log(`Found existing bot using token, stopping agent ${existingAgentId}...`);
       await this.stopAgent(existingAgentId);
+      // Wait for Telegram API to fully clear the session
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      console.log(`Waited for cleanup after stopping agent ${existingAgentId}`);
     }
   }
 
@@ -153,6 +156,8 @@ class BotManager {
       // Stop any existing bot first
       console.log(`[Bot ${agentId}] Stopping existing bot instance if any...`);
       await this.stopAgent(agentId);
+      // Wait for cleanup
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       console.log(`[Bot ${agentId}] Initializing new agent...`);
 
@@ -171,7 +176,7 @@ class BotManager {
         throw new Error("Missing Telegram bot token");
       }
 
-      // Stop any other bot using this token
+      // Stop any other bot using this token and wait for cleanup
       await this.stopBotWithToken(config.token);
 
       // Initialize bot with more detailed error handling
