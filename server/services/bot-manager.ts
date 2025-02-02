@@ -690,7 +690,18 @@ class BotManager {
       return next();
     });
 
-    // Register enter command handlers for both regular messages and channel posts
+    // Register enter command handlers
+    bot.on('text', async (ctx) => {
+      console.log(`[Bot ${agentId}] Received text message:`, {
+        text: ctx.message.text,
+        from: ctx.from
+      });
+
+      if (ctx.message.text.startsWith('/enter')) {
+        return handleEnterCommand(ctx);
+      }
+    });
+
     bot.command("enter", handleEnterCommand);
     bot.on('channel_post', (ctx, next) => {
       if (ctx.channelPost?.text?.startsWith('/enter')) {
