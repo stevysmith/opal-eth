@@ -148,14 +148,12 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ error: "Invalid agent ID" });
       }
 
-      const [agent] = await db
-        .select()
-        .from(agents)
-        .where(and(
+      const agent = await db.query.agents.findFirst({
+        where: and(
           eq(agents.id, agentId),
           eq(agents.userId, req.user.id)
-        ))
-        .limit(1);
+        )
+      });
 
       if (!agent) {
         console.log(`Agent ${agentId} not found for user ${req.user.id}`);

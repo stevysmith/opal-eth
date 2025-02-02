@@ -66,8 +66,8 @@ export default function AgentDetailsPage() {
       // Log the received data for debugging
       console.log("Received agent data:", data);
 
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to fetch agent");
+      if (!response.ok || !data) {
+        throw new Error(data?.error || "Failed to fetch agent");
       }
 
       if (!data) {
