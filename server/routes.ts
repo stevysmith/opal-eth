@@ -77,6 +77,61 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // List user's agents with active polls and giveaways
+  app.get("/api/agents", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+
+    try {
+      const userAgents = await db
+        .select()
+        .from(agents)
+        .where(eq(agents.userId, req.user.id));
+
+      // Fetch active polls and giveaways for each agent
+      const enrichedAgents = await Promise.all(userAgents.map(async (agent) => {
+        const now = new Date();
+
+        const activePolls = agent.template === "poll" 
+          ? await db
+              .select()
+              .from(polls)
+              .where(
+                and(
+                  eq(polls.agentId, agent.id),
+                  gt(polls.endTime, now)
+                )
+              )
+          : [];
+
+        const activeGiveaways = agent.template === "giveaway"
+          ? await db
+              .select()
+              .from(giveaways)
+              .where(
+                and(
+                  eq(giveaways.agentId, agent.id),
+                  gt(giveaways.endTime, now)
+                )
+              )
+          : [];
+
+        return {
+          ...agent,
+          activePolls,
+          activeGiveaways,
+        };
+      }));
+
+      res.json(enrichedAgents);
+    } catch (error) {
+      console.error("Error fetching agents:", error);
+      res.status(500).json({ 
+        error: "Failed to fetch agents",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
   // Toggle agent activation
   app.post("/api/agents/:id/toggle", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
