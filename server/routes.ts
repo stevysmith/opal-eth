@@ -2,12 +2,40 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { db } from "@db";
-import { agents, polls, giveaways, type SelectAgent, type PlatformConfig, votes, giveawayEntries } from "@db/schema";
-import { eq, and, gt, desc } from "drizzle-orm";
+import { agents, type PlatformConfig } from "@db/schema";
+import { eq, and } from "drizzle-orm";
 import { botManager } from "./services/bot-manager";
 
-export function registerRoutes(app: Express): Server {
+export async function registerRoutes(app: Express): Promise<Server> {
   setupAuth(app);
+
+  // Initialize existing active bots when server starts
+  try {
+    console.log("Initializing active bots...");
+    const activeAgents = await db
+      .select()
+      .from(agents)
+      .where(eq(agents.active, true));
+
+    console.log(`Found ${activeAgents.length} active agents to initialize`);
+
+    for (const agent of activeAgents) {
+      try {
+        console.log(`Initializing agent ${agent.id}...`);
+        await botManager.initializeAgent(agent.id);
+        console.log(`Successfully initialized agent ${agent.id}`);
+      } catch (error) {
+        console.error(`Failed to initialize agent ${agent.id}:`, error);
+        // Set agent to inactive since initialization failed
+        await db
+          .update(agents)
+          .set({ active: false })
+          .where(eq(agents.id, agent.id));
+      }
+    }
+  } catch (error) {
+    console.error("Error initializing active bots:", error);
+  }
 
   // Update the POST /api/agents route to include token validation
   app.post("/api/agents", async (req, res) => {

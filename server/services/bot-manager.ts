@@ -69,12 +69,12 @@ class BotManager {
         console.log(`[Bot ${agentId}] Start command received from:`, ctx.from);
         ctx.reply(`👋 Welcome! I'm a ${agent.template} bot.\n\nAvailable commands:\n${this.getCommandList(agent.template)}`);
       });
-    
+
       bot.command("help", (ctx) => {
         ctx.reply(`Available commands:\n${this.getCommandList(agent.template)}`);
       });
 
-      // Set up command handlers based on template
+      // Set up template-specific commands
       switch (agent.template) {
         case "poll":
           this.setupPollCommands(bot, agentId);
@@ -98,7 +98,13 @@ class BotManager {
       try {
         for (let attempt = 1; attempt <= 3; attempt++) {
           try {
-            await bot.launch();
+            await bot.launch({
+              dropPendingUpdates: true,
+              polling: {
+                timeout: 30,
+                limit: 100,
+              },
+            });
             console.log(`[Bot ${agentId}] Bot launched successfully`);
             break;
           } catch (error) {
@@ -151,6 +157,16 @@ class BotManager {
   }
 
   private setupPollCommands(bot: Telegraf<Context<Update>>, agentId: number) {
+    // Add middleware for logging all messages
+    bot.use(async (ctx, next) => {
+      console.log(`[Bot ${agentId}] Received update:`, {
+        type: ctx.updateType,
+        message: ctx.message,
+        from: ctx.from,
+      });
+      await next();
+    });
+
     bot.command("poll", async (ctx) => {
       try {
         console.log(`[Bot ${agentId}] Processing poll command. Full message:`, ctx.message);
