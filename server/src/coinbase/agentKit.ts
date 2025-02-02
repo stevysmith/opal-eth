@@ -1,31 +1,60 @@
-import { AgentKit, Wallet } from '@coinbase/agentkit';
+import { 
+  AgentKit,
+  CdpWalletProvider,
+  walletActionProvider,
+  erc20ActionProvider,
+  cdpApiActionProvider,
+  cdpWalletActionProvider
+} from '@coinbase/agentkit';
 import { db } from '@db';
 import { mpcWallets } from '@db/schema';
 import { eq } from 'drizzle-orm';
 
-// Initialize AgentKit with environment variables
-export const initializeAgentKit = () => {
+// Initialize CDP Wallet Provider
+const initializeAgentKit = async () => {
   if (!process.env.CDP_API_KEY_NAME || !process.env.CDP_API_KEY_PRIVATE_KEY) {
     throw new Error('Missing required Coinbase CDP API credentials');
   }
 
-  return AgentKit.create({
+  const config = {
     apiKeyName: process.env.CDP_API_KEY_NAME,
-    privateKey: process.env.CDP_API_KEY_PRIVATE_KEY,
+    apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+    networkId: process.env.NETWORK_ID || "base-sepolia",
+  };
+
+  const walletProvider = await CdpWalletProvider.configure(config);
+
+  return await AgentKit.from({
+    walletProvider,
+    actionProviders: [
+      walletActionProvider(),
+      erc20ActionProvider(),
+      cdpApiActionProvider({
+        apiKeyName: process.env.CDP_API_KEY_NAME,
+        apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+      }),
+      cdpWalletActionProvider({
+        apiKeyName: process.env.CDP_API_KEY_NAME,
+        apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+      }),
+    ],
   });
 };
 
 export class USDCPaymentService {
-  private wallet: Wallet | null = null;
+  private wallet: any = null;
   private readonly agentId: number;
   private readonly agentKit: AgentKit;
 
   constructor(agentId: number) {
     this.agentId = agentId;
-    this.agentKit = initializeAgentKit();
+    this.agentKit = null as any; // Will be initialized in initialize()
   }
 
   async initialize() {
+    // Initialize AgentKit
+    this.agentKit = await initializeAgentKit();
+
     // Check if wallet exists in database
     const [existingWallet] = await db
       .select()
@@ -34,13 +63,18 @@ export class USDCPaymentService {
       .limit(1);
 
     if (existingWallet) {
-      this.wallet = await this.agentKit.loadWallet(existingWallet.walletId);
+      // Load existing wallet
+      const walletProvider = await this.agentKit.getWalletProvider();
+      this.wallet = await walletProvider.getWallet(existingWallet.walletId);
     } else {
-      // Create new wallet if none exists
-      this.wallet = await this.agentKit.createWallet();
+      // Create new wallet
+      const walletProvider = await this.agentKit.getWalletProvider();
+      const newWallet = await walletProvider.createWallet();
+      this.wallet = newWallet;
+
       await db.insert(mpcWallets).values({
         agentId: this.agentId,
-        walletId: this.wallet.id,
+        walletId: newWallet.id,
         createdAt: new Date(),
       });
     }
@@ -51,10 +85,10 @@ export class USDCPaymentService {
       throw new Error('Wallet not initialized');
     }
 
-    const tx = await this.wallet.transfer({
+    const tx = await this.wallet.send({
       to: toAddress,
       amount,
-      tokenType: 'USDC',
+      asset: 'USDC',
     });
 
     return tx.hash;
@@ -65,8 +99,8 @@ export class USDCPaymentService {
       throw new Error('Wallet not initialized');
     }
 
-    const balance = await this.wallet.getBalance('USDC');
-    return balance;
+    const balance = await this.wallet.balance('USDC');
+    return balance.toString();
   }
 }
 
