@@ -99,7 +99,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // List user's agents with active polls and giveaways
+  // Update the GET /api/agents endpoint to properly check active polls
   app.get("/api/agents", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
 
@@ -110,9 +110,8 @@ export function registerRoutes(app: Express): Server {
         .where(eq(agents.userId, req.user.id));
 
       // Fetch active polls and giveaways for each agent
+      const now = new Date();
       const enrichedAgents = await Promise.all(userAgents.map(async (agent) => {
-        const now = new Date();
-
         const activePolls = agent.template === "poll" 
           ? await db
               .select()
@@ -136,6 +135,22 @@ export function registerRoutes(app: Express): Server {
                 )
               )
           : [];
+
+        // Update agent's active status based on active polls/giveaways
+        const hasActivePollsOrGiveaways = activePolls.length > 0 || activeGiveaways.length > 0;
+        if (hasActivePollsOrGiveaways !== agent.active) {
+          const [updatedAgent] = await db
+            .update(agents)
+            .set({ active: hasActivePollsOrGiveaways })
+            .where(eq(agents.id, agent.id))
+            .returning();
+
+          return {
+            ...updatedAgent,
+            activePolls,
+            activeGiveaways,
+          };
+        }
 
         return {
           ...agent,
