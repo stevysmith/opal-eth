@@ -8,12 +8,13 @@ import schedule from "node-schedule";
 class BotManager {
   private bots: Map<number, Telegraf<Context<Update>>> = new Map();
   private jobs: Map<number, schedule.Job> = new Map();
+  private tokenMap: Map<string, number> = new Map(); // Track which agent is using which token
 
   async stopAgent(agentId: number) {
-    const bot = this.bots.get(agentId);
-    if (bot) {
-      try {
-        console.log(`[Bot ${agentId}] Stopping bot...`);
+    try {
+      console.log(`[Bot ${agentId}] Stopping bot...`);
+      const bot = this.bots.get(agentId);
+      if (bot) {
         // First stop the bot
         await bot.stop();
         console.log(`[Bot ${agentId}] Bot stopped successfully`);
@@ -26,20 +27,33 @@ class BotManager {
           }
         }
 
-        // Wait for cleanup to complete
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Remove token mapping
+        for (const [token, id] of this.tokenMap.entries()) {
+          if (id === agentId) {
+            this.tokenMap.delete(token);
+          }
+        }
 
         // Remove bot from the map
         this.bots.delete(agentId);
         console.log(`[Bot ${agentId}] Cleanup completed`);
         return true;
-      } catch (error) {
-        console.error(`[Bot ${agentId}] Error stopping bot:`, error);
-        throw error;
       }
-    } else {
       console.log(`[Bot ${agentId}] No active bot found to stop`);
       return false;
+    } catch (error) {
+      console.error(`[Bot ${agentId}] Error stopping bot:`, error);
+      // Still try to clean up
+      this.bots.delete(agentId);
+      throw error;
+    }
+  }
+
+  private async stopBotWithToken(token: string) {
+    const existingAgentId = this.tokenMap.get(token);
+    if (existingAgentId) {
+      console.log(`Found existing bot using token, stopping agent ${existingAgentId}...`);
+      await this.stopAgent(existingAgentId);
     }
   }
 
@@ -134,12 +148,11 @@ class BotManager {
     }
   }
 
-  private async initializeAgent(agentId: number) {
+  async initializeAgent(agentId: number) {
     try {
-      // Stop any existing bot first and wait for cleanup
+      // Stop any existing bot first
       console.log(`[Bot ${agentId}] Stopping existing bot instance if any...`);
       await this.stopAgent(agentId);
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for cleanup
 
       console.log(`[Bot ${agentId}] Initializing new agent...`);
 
@@ -158,9 +171,8 @@ class BotManager {
         throw new Error("Missing Telegram bot token");
       }
 
-      if (!config?.channelId) {
-        throw new Error("Missing channel ID");
-      }
+      // Stop any other bot using this token
+      await this.stopBotWithToken(config.token);
 
       // Initialize bot with more detailed error handling
       const { bot, channelId: finalChannelId } = await this.initializeBotInstance(
@@ -200,14 +212,15 @@ class BotManager {
         ctx.reply("Sorry, something went wrong. Please try again later.");
       });
 
-      // Start bot in polling mode with better error handling and backoff
+      // Start bot in polling mode with better error handling
       console.log(`[Bot ${agentId}] Starting bot in polling mode...`);
-      let started = false;
       try {
         console.log(`[Bot ${agentId}] Launching bot...`);
         await bot.launch();
         console.log(`[Bot ${agentId}] Bot launched successfully`);
-        started = true;
+
+        // Register token usage
+        this.tokenMap.set(config.token, agentId);
 
         // Send welcome message after successful launch
         console.log(`[Bot ${agentId}] Sending welcome message to channel...`);
@@ -217,18 +230,15 @@ class BotManager {
         );
         console.log(`[Bot ${agentId}] Welcome message sent successfully`);
 
+        // Store bot instance
+        this.bots.set(agentId, bot);
+        return true;
       } catch (error) {
         console.error(`[Bot ${agentId}] Error during launch or welcome message:`, error);
+        // Cleanup on error
+        await this.stopAgent(agentId);
         throw error;
       }
-
-      if (!started) {
-        throw new Error("Failed to start bot");
-      }
-
-      // Store bot instance
-      this.bots.set(agentId, bot);
-      return true;
     } catch (error) {
       console.error(`[Bot ${agentId}] Failed to initialize:`, error);
       await this.stopAgent(agentId);
