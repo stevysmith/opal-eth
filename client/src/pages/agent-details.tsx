@@ -197,7 +197,8 @@ export default function AgentDetailsPage({ id }: AgentDetailsPageProps) {
     queryKey: [`/api/agents/${agentId}`],
     enabled: !isNaN(agentId),
     retry: 1,
-    staleTime: 0,
+    staleTime: 0, // Always fetch fresh data
+    refetchInterval: 10000, // Refetch every 10 seconds to keep giveaway status updated
     queryFn: async () => {
       if (isNaN(agentId)) throw new Error("Invalid agent ID");
 
