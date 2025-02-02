@@ -194,6 +194,15 @@ class BotManager {
       // Set up commands
       console.log(`[Bot ${agentId}] Setting up command handlers...`);
 
+       // Register basic message handler first
+       bot.on('message', (ctx) => {
+        console.log(`[Bot ${agentId}] Basic message handler received:`, {
+          text: ctx.message?.text,
+          from: ctx.from,
+          chat: ctx.chat
+        });
+      });
+
       bot.command("start", (ctx) => {
         console.log(`[Bot ${agentId}] Start command received from:`, ctx.from);
         ctx.reply(`👋 Welcome! I'm a ${agent.template} bot.\n\nAvailable commands:\n${this.getCommandList(agent.template)}`);
@@ -425,28 +434,124 @@ class BotManager {
     });
   }
 
-  private setupGiveawayCommands(bot: Telegraf<Context<Update>>, agentId: number) {
-    console.log(`[Bot ${agentId}] Setting up giveaway commands`);
+    private setupGiveawayCommands = (bot: Telegraf<Context<Update>>, agentId: number) => {
+      console.log(`[Bot ${agentId}] Setting up giveaway commands`);
 
-    // Add middleware for logging all updates
-    bot.use(async (ctx, next) => {
-      console.log(`[Bot ${agentId}] Received update:`, {
-        type: ctx.updateType,
-        from: ctx.from,
-        chat: ctx.chat,
-        text: ctx.message?.text || ctx.channelPost?.text,
-      });
-      await next();
-    });
+      // Add explicit enter command handler
+      bot.command('enter', async (ctx) => {
+        console.log(`[Bot ${agentId}] Enter command received:`, {
+          text: ctx.message?.text,
+          from: ctx.from,
+          chat: ctx.chat
+        });
 
-    // Debug logging for all messages
-    bot.on("message", (ctx) => {
-      console.log(`[Bot ${agentId}] Received message:`, {
-        from: ctx.from?.id,
-        text: ctx.message,
-        type: ctx.updateType
+        try {
+          if (!ctx.message?.text) {
+            console.log(`[Bot ${agentId}] No message text found`);
+            return ctx.reply('Please send a valid command');
+          }
+
+          const parts = ctx.message.text.split(' ');
+          console.log(`[Bot ${agentId}] Command parts:`, parts);
+
+          if (parts.length !== 3) {
+            return ctx.reply(
+              "Please use the format: /enter <giveaway-id> <wallet-address>\n" +
+              "Example: /enter 7 0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
+            );
+          }
+
+          const [, giveawayIdStr, walletAddress] = parts;
+          const giveawayId = parseInt(giveawayIdStr);
+
+          console.log(`[Bot ${agentId}] Processing entry:`, {
+            giveawayId,
+            walletAddress,
+            userId: ctx.from?.id
+          });
+
+          if (isNaN(giveawayId)) {
+            return ctx.reply("Please provide a valid giveaway ID number");
+          }
+
+          if (!validateWalletAddress(walletAddress)) {
+            return ctx.reply("Please provide a valid Ethereum wallet address starting with 0x");
+          }
+
+          const [giveaway] = await db
+            .select()
+            .from(giveaways)
+            .where(eq(giveaways.id, giveawayId))
+            .limit(1);
+
+          if (!giveaway) {
+            return ctx.reply(`Giveaway #${giveawayId} not found`);
+          }
+
+          if (new Date() > giveaway.endTime) {
+            return ctx.reply(`Giveaway #${giveawayId} has already ended`);
+          }
+
+          if (!ctx.from?.id) {
+            return ctx.reply("Could not identify you. Please try again.");
+          }
+
+          const userId = ctx.from.id.toString();
+
+          // Check for existing entry
+          const [existingEntry] = await db
+            .select()
+            .from(giveawayEntries)
+            .where(and(
+              eq(giveawayEntries.giveawayId, giveaway.id),
+              eq(giveawayEntries.userId, userId)
+            ))
+            .limit(1);
+
+          if (existingEntry) {
+            return ctx.reply("You have already entered this giveaway!");
+          }
+
+          // Record the entry
+          await db.insert(giveawayEntries).values({
+            giveawayId: giveaway.id,
+            userId,
+            walletAddress,
+          });
+
+          return ctx.reply(
+            "🎉 Success! You've been entered into the giveaway!\n\n" +
+            `Prize: ${giveaway.prize}\n` +
+            `Your wallet: ${walletAddress}\n\n` +
+            "Good luck! Winners will be announced in the channel."
+          );
+
+        } catch (error) {
+          console.error(`[Bot ${agentId}] Error processing entry:`, error);
+          return ctx.reply("Sorry, something went wrong. Please try again.");
+        }
       });
-    });
+
+      // Add catch-all message handler for debugging
+      bot.on('message', (ctx) => {
+        console.log(`[Bot ${agentId}] Received message:`, {
+          text: ctx.message?.text,
+          type: ctx.message?.text?.startsWith('/') ? 'command' : 'message',
+          from: ctx.from?.id,
+          chat: ctx.chat?.id
+        });
+      });
+
+          // Add middleware for logging all updates
+          bot.use(async (ctx, next) => {
+            console.log(`[Bot ${agentId}] Received update:`, {
+              type: ctx.updateType,
+              from: ctx.from,
+              chat: ctx.chat,
+              text: ctx.message?.text || ctx.channelPost?.text,
+            });
+            await next();
+          });
 
     const handleGiveawayCommand = async (ctx: Context) => {
       try {
@@ -576,128 +681,15 @@ class BotManager {
       return /^0x[a-fA-F0-9]{40}$/.test(address);
     };
 
-    // Register enter command handlers
-    bot.command("enter", async (ctx) => {
-      console.log(`[Bot ${agentId}] Processing enter command. Full message:`, {
-        text: ctx.message?.text,
-        messageFrom: ctx.message?.from,
-        channelPost: ctx.channelPost,
-        chat: ctx.chat,
-        from: ctx.from
-      });
 
-      try {
-        const text = ctx.message?.text || '';
-
-        // If this is a channel post, instruct to send DM
-        if (ctx.channelPost) {
-          const me = await bot.telegram.getMe();
-          return bot.telegram.sendMessage(
-            ctx.chat!.id,
-            '🎫 To enter the giveaway, please follow these steps:\n\n' +
-            `1. Click this link to open chat: @${me.username}\n` +
-            `2. Send the command: /enter <giveaway-id> <your-wallet-address>\n\n` +
-            'Example: /enter 123 0x742d35Cc6634C0532925a3b844Bc454e4438f44e\n\n' +
-            'This ensures we can properly link your entry to your wallet address for prize distribution.'
-          );
-        }
-
-        const parts = text.split(' ');
-        if (parts.length !== 3) {
-          console.log(`[Bot ${agentId}] Invalid command format. Parts:`, parts);
-          return ctx.reply(
-            "Please provide both the giveaway ID and your wallet address.\n" +
-            "Format: /enter <giveaway-id> <wallet-address>\n" +
-            "Example: /enter 123 0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
-          );
-        }
-
-        const [, giveawayIdStr, walletAddress] = parts;
-        const giveawayId = parseInt(giveawayIdStr);
-
-        console.log(`[Bot ${agentId}] Parsed entry:`, { giveawayId, walletAddress });
-
-        if (isNaN(giveawayId)) {
-          return ctx.reply("Please provide a valid giveaway ID. Example: /enter 123 0x742d35Cc6634C0532925a3b844Bc454e4438f44e");
-        }
-
-        if (!validateWalletAddress(walletAddress)) {
-          return ctx.reply(
-            "❌ Invalid wallet address format. Please provide a valid Ethereum wallet address.\n" +
-            "It should start with '0x' followed by 40 hexadecimal characters."
-          );
-        }
-
-        const [giveaway] = await db
-          .select()
-          .from(giveaways)
-          .where(eq(giveaways.id, giveawayId))
-          .limit(1);
-
-        console.log(`[Bot ${agentId}] Found giveaway:`, giveaway);
-
-        if (!giveaway) {
-          return ctx.reply("Giveaway not found");
-        }
-
-        if (new Date() > giveaway.endTime) {
-          return ctx.reply("This giveaway has ended");
-        }
-
-        // For direct messages, we can reliably get the user's Telegram ID
-        if (!ctx.from?.id) {
-          return ctx.reply("Could not identify you. Please make sure you're sending this command directly to the bot.");
-        }
-
-        const userId = ctx.from.id.toString();
-
-        // Check if user already entered
-        const [existingEntry] = await db
-          .select()
-          .from(giveawayEntries)
-          .where(and(
-            eq(giveawayEntries.giveawayId, giveaway.id),
-            eq(giveawayEntries.userId, userId)
-          ))
-          .limit(1);
-
-        if (existingEntry) {
-          console.log(`[Bot ${agentId}] User ${userId} already entered giveaway ${giveawayId}`);
-          return ctx.reply("You've already entered this giveaway!");
-        }
-
-        await db.insert(giveawayEntries).values({
-          giveawayId: giveaway.id,
-          userId,
-          walletAddress,
-        });
-
-        console.log(`[Bot ${agentId}] User ${userId} successfully entered giveaway ${giveawayId}`);
-        ctx.reply(
-          "🎫 You've been entered into the giveaway! Good luck!\n\n" +
-          `Your wallet address ${walletAddress} has been registered for the prize distribution.`
-        );
-      } catch (error) {
-        console.error(`[Bot ${agentId}] Error handling enter command:`, error);
-        ctx.reply("Failed to enter giveaway. Please try again.");
-      }
-    });
-
-    // Also handle channel posts for enter command
-    bot.on('channel_post', (ctx, next) => {
-      if (ctx.channelPost?.text?.startsWith('/enter')) {
-        return bot.command("enter")(ctx);
-      }
-      return next();
-    });
-
-    bot.command("giveaway", handleGiveawayCommand);
     bot.on('channel_post', (ctx, next) => {
       if (ctx.channelPost?.text?.startsWith('/giveaway')) {
         return handleGiveawayCommand(ctx);
       }
       return next();
     });
+    bot.command("giveaway", handleGiveawayCommand);
+
   }
 
   private setupQACommands(bot: Telegraf<Context<Update>>, agentId: number) {
