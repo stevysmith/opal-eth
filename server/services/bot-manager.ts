@@ -54,8 +54,8 @@ class BotManager {
     if (existingAgentId) {
       console.log(`Found existing bot using token, stopping agent ${existingAgentId}...`);
       await this.stopAgent(existingAgentId);
-      // Wait for Telegram API to fully clear the session
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      // Increase wait time for Telegram API to fully clear the session
+      await new Promise(resolve => setTimeout(resolve, 10000));
       console.log(`Waited for cleanup after stopping agent ${existingAgentId}`);
     }
   }
@@ -156,8 +156,8 @@ class BotManager {
       // Stop any existing bot first
       console.log(`[Bot ${agentId}] Stopping existing bot instance if any...`);
       await this.stopAgent(agentId);
-      // Wait for cleanup
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Increase wait time for cleanup
+      await new Promise(resolve => setTimeout(resolve, 5000));
 
       console.log(`[Bot ${agentId}] Initializing new agent...`);
 
@@ -234,47 +234,64 @@ class BotManager {
             finalChannelId
           });
 
-          // Launch with timeout
-          await Promise.race([
-            bot.launch().catch(e => {
-              console.error(`[Bot ${agentId}] Launch promise rejected:`, e);
-              throw e;
-            }),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error("Internal launch timeout (30s)")), 30000)
-            )
-          ]);
+          try {
+            // Launch with timeout and specific error handling
+            await Promise.race([
+              bot.launch().catch(e => {
+                if (e.message?.includes('409: Conflict')) {
+                  console.log(`[Bot ${agentId}] Detected conflict, waiting longer...`);
+                  return new Promise(resolve => setTimeout(resolve, 15000))
+                    .then(() => bot.launch());
+                }
+                throw e;
+              }),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error("Internal launch timeout (30s)")), 30000)
+              )
+            ]);
 
-          const launchTime = Date.now() - startTime;
-          console.log(`[Bot ${agentId}] Bot launched successfully in ${launchTime}ms`);
+            const launchTime = Date.now() - startTime;
+            console.log(`[Bot ${agentId}] Bot launched successfully in ${launchTime}ms`);
 
-          // Register token usage
-          this.tokenMap.set(config.token, agentId);
+            // Register token usage
+            this.tokenMap.set(config.token, agentId);
 
-          // Send welcome message after successful launch
-          console.log(`[Bot ${agentId}] Sending welcome message to channel...`);
-          await bot.telegram.sendMessage(
-            finalChannelId,
-            `🤖 Bot restarted and ready!\n\nTemplate: ${agent.template}\nName: ${agent.name}\n\nUse the following commands:\n${this.getCommandList(agent.template)}`
-          );
-          console.log(`[Bot ${agentId}] Welcome message sent successfully`);
+            // Send welcome message after successful launch
+            console.log(`[Bot ${agentId}] Sending welcome message to channel...`);
+            await bot.telegram.sendMessage(
+              finalChannelId,
+              `🤖 Bot restarted and ready!\n\nTemplate: ${agent.template}\nName: ${agent.name}\n\nUse the following commands:\n${this.getCommandList(agent.template)}`
+            );
+            console.log(`[Bot ${agentId}] Welcome message sent successfully`);
 
-          // Store bot instance
-          this.bots.set(agentId, bot);
-          return true;
+            // Store bot instance
+            this.bots.set(agentId, bot);
+            return true;
 
+          } catch (error) {
+            console.error(`[Bot ${agentId}] Launch attempt ${retryCount + 1} failed:`, {
+              error: error.message,
+              stack: error.stack,
+              type: error.constructor.name
+            });
+
+            if (error.message?.includes('409: Conflict')) {
+              console.log(`[Bot ${agentId}] Conflict detected, waiting longer before retry...`);
+              await new Promise(resolve => setTimeout(resolve, 15000));
+            }
+
+            retryCount++;
+            if (retryCount < maxRetries) {
+              const delay = 2000 * retryCount; // Exponential backoff
+              console.log(`[Bot ${agentId}] Retrying in ${delay}ms...`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+            }
+          }
         } catch (error) {
-          console.error(`[Bot ${agentId}] Launch attempt ${retryCount + 1} failed:`, {
-            error: error.message,
-            stack: error.stack,
-            type: error.constructor.name
-          });
-
+          console.error(`[Bot ${agentId}] Outer error during launch attempt:`, error);
           retryCount++;
           if (retryCount < maxRetries) {
-            const delay = 2000 * retryCount; // Exponential backoff
-            console.log(`[Bot ${agentId}] Retrying in ${delay}ms...`);
-            await new Promise(resolve => setTimeout(resolve, delay));
+            await new Promise(resolve => setTimeout(resolve, 5000));
           }
         }
       }
