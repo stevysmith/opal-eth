@@ -182,7 +182,32 @@ class BotManager {
           from: ctx.from,
           chat: ctx.chat
         });
+
+        if (ctx.message?.text?.startsWith('/enter')) {
+          console.log(`[Bot ${agentId}] Message identified as enter command`);
+          // Log the command matching attempt
+          console.log(`[Bot ${agentId}] Attempting to match enter command pattern:`, {
+            commandText: ctx.message.text,
+            matchPattern: '/enter'
+          });
+        } else if (ctx.message?.text?.startsWith('/')) {
+          console.log(`[Bot ${agentId}] Message identified as other command:`, {
+            commandText: ctx.message.text
+          });
+        }
       });
+
+      // Add debug logging middleware for command handling
+      bot.use((ctx, next) => {
+        console.log(`[Bot ${agentId}] Command middleware processing:`, {
+          text: ctx.message?.text,
+          type: ctx.updateType,
+          isCommand: ctx.message?.text?.startsWith('/'),
+          commandType: ctx.message?.text?.split(' ')[0]
+        });
+        return next();
+      });
+    
 
       bot.command("start", (ctx) => {
         console.log(`[Bot ${agentId}] Start command received from:`, ctx.from);
