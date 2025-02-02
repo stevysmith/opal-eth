@@ -5,6 +5,7 @@ import { agents, polls, votes, giveaways, giveawayEntries, users } from "@db/sch
 import { eq, and } from "drizzle-orm";
 import schedule from "node-schedule";
 import coinbaseService from './coinbase/agentKit';
+import { giveawayPayoutService } from "../src/services/giveawayPayoutService";
 
 class BotManager {
   private bots: Map<number, Telegraf<Context<Update>>> = new Map();
@@ -489,51 +490,38 @@ class BotManager {
             // Pick random winner
             const winner = entries[Math.floor(Math.random() * entries.length)];
 
-            // Get winner's wallet address
-            const [winnerUser] = await db
-              .select()
-              .from(users)
-              .where(eq(users.id, parseInt(winner.userId)))
-              .limit(1);
+            try {
+              // Process the winner using giveawayPayoutService
+              const payoutResult = await giveawayPayoutService.processGiveawayWinner(giveaway.id, winner.userId);
 
-            await db
-              .update(giveaways)
-              .set({ winnerId: winner.userId })
-              .where(eq(giveaways.id, giveaway.id));
+              // Send success message with transaction details
+              await ctx.reply(
+                `🎉 Giveaway Ended!\n\n` +
+                `Prize: ${prize}\n` +
+                `Winner: @${winner.userId}\n` +
+                `💰 USDC Payment Sent!\n` +
+                `Amount: ${payoutResult.amount} USDC\n` +
+                `Transaction: ${payoutResult.txHash}\n\n` +
+                `Congratulations!`
+              );
+            } catch (error) {
+              console.error(`[Bot ${agentId}] Error processing payout:`, error);
 
-            // If winner has a wallet address, attempt USDC payout
-            let payoutMessage = '';
-            if (winnerUser?.walletAddress) {
-              try {
-                // Get or create MPC wallet for the agent
-                let walletId = await coinbaseService.getWalletForAgent(agentId);
-                if (!walletId) {
-                  walletId = await coinbaseService.createMpcWallet(agentId);
-                }
+              // Still update giveaway with winner
+              await db
+                .update(giveaways)
+                .set({ winnerId: winner.userId })
+                .where(eq(giveaways.id, giveaway.id));
 
-                // Send USDC to winner
-                const amount = '10'; // Default amount, can be made configurable
-                const txId = await coinbaseService.sendUsdc(
-                  walletId,
-                  winnerUser.walletAddress,
-                  amount
-                );
-                payoutMessage = `\n💰 USDC payout sent! Transaction ID: ${txId}`;
-              } catch (error) {
-                console.error('Failed to send USDC payout:', error);
-                payoutMessage = '\n⚠️ USDC payout failed. Winner will be contacted manually.';
-              }
-            } else {
-              payoutMessage = '\n📝 Winner needs to set up their wallet address to receive USDC.';
+              // Send message indicating payout issue
+              await ctx.reply(
+                `🎉 Giveaway Ended!\n\n` +
+                `Prize: ${prize}\n` +
+                `Winner: @${winner.userId}\n` +
+                `⚠️ Note: ${error.message}\n\n` +
+                `Congratulations to the winner! Our team will handle the payout manually.`
+              );
             }
-
-            await ctx.reply(
-              `🎉 Giveaway Ended!\n\n` +
-              `Prize: ${prize}\n` +
-              `Winner: @${winner.userId}\n` +
-              `${payoutMessage}\n\n` +
-              `Congratulations!`
-            );
           } catch (error) {
             console.error(`[Bot ${agentId}] Error ending giveaway:`, error);
             await ctx.reply('An error occurred while ending the giveaway.');
