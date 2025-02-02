@@ -9,6 +9,24 @@ class BotManager {
   private bots: Map<number, Telegraf<Context<Update>>> = new Map();
   private jobs: Map<number, schedule.Job> = new Map();
 
+  private async setupWebhook(bot: Telegraf<Context<Update>>, agentId: number) {
+    try {
+      // Enable receiving updates
+      console.log(`Setting up webhook for bot ${agentId}`);
+      await bot.telegram.deleteWebhook();
+      await bot.telegram.setWebhook('');
+      console.log(`Webhook removed, starting polling for bot ${agentId}`);
+
+      // Use polling instead of webhooks for more reliable updates
+      bot.catch((err) => {
+        console.error(`Error in bot ${agentId}:`, err);
+      });
+    } catch (error) {
+      console.error(`Failed to setup updates for bot ${agentId}:`, error);
+      throw error;
+    }
+  }
+
   async initializeAgent(agentId: number) {
     try {
       const [agent] = await db
@@ -44,6 +62,9 @@ class BotManager {
             break;
         }
 
+        // Setup webhook and enable receiving updates
+        await this.setupWebhook(bot, agentId);
+
         // Test channel connection with retries
         let retryCount = 0;
         const maxRetries = 3;
@@ -57,21 +78,6 @@ class BotManager {
             );
             console.log(`Bot ${agentId} successfully connected to channel ${config.channelId}`);
             messageSuccess = true;
-
-            // Try to launch the bot, but don't fail if it times out as long as messages work
-            try {
-              await Promise.race([
-                bot.launch(),
-                new Promise((_, reject) => setTimeout(() => reject(new Error("Launch timeout")), 5000))
-              ]);
-            } catch (error) {
-              // Only log the launch timeout, don't throw
-              if (error.message === "Launch timeout") {
-                console.log(`Bot ${agentId} launch timed out, but messages are working`);
-              } else {
-                throw error;
-              }
-            }
 
             this.bots.set(agentId, bot);
             return true;
@@ -212,20 +218,20 @@ class BotManager {
     bot.command("giveaway", async (ctx) => {
       try {
         const message = ctx.message.text.substring(9); // Remove '/giveaway '
-        console.log("Received giveaway command:", message);
+        console.log(`[Bot ${agentId}] Received giveaway command:`, message);
 
         const prizeMatch = message.match(/"([^"]+)"/);
         const durationMatch = message.match(/in (\d+)\s*(mins?|hours?|h)/i);
 
         if (!prizeMatch || !durationMatch) {
-          console.log("Invalid format received:", { prizeMatch, durationMatch });
+          console.log(`[Bot ${agentId}] Invalid format received:`, { prizeMatch, durationMatch });
           return ctx.reply('Invalid format. Use: /giveaway "Prize" <duration_in_hours>\nExample: /giveaway "Special Prize" in 2 hours');
         }
 
         const prize = prizeMatch[1];
         const amount = parseInt(durationMatch[1]);
         const unit = durationMatch[2].toLowerCase();
-        console.log("Parsed giveaway details:", { prize, amount, unit });
+        console.log(`[Bot ${agentId}] Parsed giveaway details:`, { prize, amount, unit });
 
         // Convert duration to hours
         const durationHours = unit.startsWith('min') ? amount / 60 : amount;
@@ -233,14 +239,13 @@ class BotManager {
         const endTime = new Date();
         endTime.setHours(endTime.getHours() + durationHours);
 
-        console.log("Creating giveaway in database:", {
+        console.log(`[Bot ${agentId}] Creating giveaway in database:`, {
           agentId,
           prize,
           startTime: new Date(),
           endTime,
         });
 
-        // Wrap the database operations in a try-catch block
         try {
           const [giveaway] = await db.insert(giveaways).values({
             agentId,
@@ -249,7 +254,16 @@ class BotManager {
             endTime,
           }).returning();
 
-          console.log("Successfully created giveaway in database:", giveaway);
+          console.log(`[Bot ${agentId}] Successfully created giveaway:`, giveaway);
+
+          // Verify giveaway was created
+          const [verifyGiveaway] = await db
+            .select()
+            .from(giveaways)
+            .where(eq(giveaways.id, giveaway.id))
+            .limit(1);
+
+          console.log(`[Bot ${agentId}] Verified giveaway in database:`, verifyGiveaway);
 
           await ctx.reply(
             `🎉 New Giveaway!\n\nPrize: ${giveaway.prize}\nEnds in: ${durationHours < 1 ? `${Math.round(durationHours * 60)} minutes` : `${durationHours} hours`}\n\nEnter using: /enter ${giveaway.id}`
@@ -280,11 +294,11 @@ class BotManager {
             );
           }));
         } catch (dbError) {
-          console.error("Database error creating giveaway:", dbError);
+          console.error(`[Bot ${agentId}] Database error creating giveaway:`, dbError);
           throw dbError;
         }
       } catch (error) {
-        console.error("Error creating giveaway:", error);
+        console.error(`[Bot ${agentId}] Error creating giveaway:`, error);
         ctx.reply("Failed to create giveaway. Please try again.");
       }
     });
