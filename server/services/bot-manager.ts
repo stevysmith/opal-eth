@@ -212,16 +212,20 @@ class BotManager {
     bot.command("giveaway", async (ctx) => {
       try {
         const message = ctx.message.text.substring(9); // Remove '/giveaway '
+        console.log("Received giveaway command:", message);
+
         const prizeMatch = message.match(/"([^"]+)"/);
         const durationMatch = message.match(/in (\d+)\s*(mins?|hours?|h)/i);
 
         if (!prizeMatch || !durationMatch) {
-          return ctx.reply('Invalid format. Use: /giveaway "Prize" <duration_in_hours>');
+          console.log("Invalid format received:", { prizeMatch, durationMatch });
+          return ctx.reply('Invalid format. Use: /giveaway "Prize" <duration_in_hours>\nExample: /giveaway "Special Prize" in 2 hours');
         }
 
         const prize = prizeMatch[1];
         const amount = parseInt(durationMatch[1]);
         const unit = durationMatch[2].toLowerCase();
+        console.log("Parsed giveaway details:", { prize, amount, unit });
 
         // Convert duration to hours
         const durationHours = unit.startsWith('min') ? amount / 60 : amount;
@@ -229,12 +233,21 @@ class BotManager {
         const endTime = new Date();
         endTime.setHours(endTime.getHours() + durationHours);
 
+        console.log("Creating giveaway in database:", {
+          agentId,
+          prize,
+          startTime: new Date(),
+          endTime,
+        });
+
         const [giveaway] = await db.insert(giveaways).values({
           agentId,
           prize,
           startTime: new Date(),
           endTime,
         }).returning();
+
+        console.log("Created giveaway:", giveaway);
 
         await ctx.reply(
           `🎉 New Giveaway!\n\nPrize: ${giveaway.prize}\nEnds in: ${durationHours < 1 ? `${Math.round(durationHours * 60)} minutes` : `${durationHours} hours`}\n\nEnter using: /enter ${giveaway.id}`

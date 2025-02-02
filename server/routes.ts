@@ -132,7 +132,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Get single agent with details
+  // List user's agents with active polls and giveaways
   app.get("/api/agents/:id", async (req, res) => {
     if (!req.isAuthenticated()) {
       console.log("Unauthorized access attempt to agent details");
