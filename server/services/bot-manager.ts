@@ -406,18 +406,172 @@ class BotManager {
   }
 
   private setupGiveawayCommands = (bot: Telegraf<Context<Update>>, agentId: number) => {
-    console.log(`[Bot ${agentId}] Setting up giveaway commands`);
+    console.log(`[Bot ${agentId}] Setting up giveaway commands...`);
 
-    // Add middleware for logging all updates
+    // Debug logging middleware
     bot.use(async (ctx, next) => {
-      console.log(`[Bot ${agentId}] Received update:`, {
+      console.log(`[Bot ${agentId}] Middleware - Received update:`, {
         type: ctx.updateType,
-        from: ctx.from,
-        chat: ctx.chat,
+        from: ctx.from?.id,
+        chat: ctx.chat?.id,
         messageType: ctx.message ? 'direct' : ctx.channelPost ? 'channel' : 'other',
-        text: ctx.message?.text || ctx.channelPost?.text
+        text: ctx.message?.text || ctx.channelPost?.text,
+        isCommand: ctx.message?.text?.startsWith('/') || ctx.channelPost?.text?.startsWith('/'),
+      });
+
+      try {
+        await next();
+        console.log(`[Bot ${agentId}] Middleware - Successfully processed update`);
+      } catch (error) {
+        console.error(`[Bot ${agentId}] Middleware - Error processing update:`, error);
+        throw error;
+      }
+    });
+
+    // Debug logging for all messages
+    bot.on('message', async (ctx, next) => {
+      console.log(`[Bot ${agentId}] Message handler triggered:`, {
+        text: ctx.message?.text,
+        from: ctx.from?.id,
+        chat: ctx.chat?.id,
+        type: ctx.updateType,
+        isCommand: ctx.message?.text?.startsWith('/')
       });
       await next();
+    });
+
+    const handleEnterCommand = async (ctx: Context) => {
+      console.log(`[Bot ${agentId}] Enter command handler started:`, {
+        text: ctx.message?.text,
+        from: ctx.from?.id,
+        chat: ctx.chat?.id,
+        type: ctx.updateType,
+        source: 'command handler'
+      });
+
+      try {
+        const text = ctx.message?.text || '';
+        console.log(`[Bot ${agentId}] Processing enter command text:`, text);
+
+        const parts = text.split(' ');
+        console.log(`[Bot ${agentId}] Command parts:`, parts);
+
+        if (parts.length !== 3) {
+          console.log(`[Bot ${agentId}] Invalid command format:`, { parts });
+          return ctx.reply(
+            "Please provide both the giveaway ID and your wallet address.\n" +
+            "Format: /enter <giveaway-id> <wallet-address>\n" +
+            "Example: /enter 8 0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
+          );
+        }
+
+        const [, giveawayIdStr, walletAddress] = parts;
+        const giveawayId = parseInt(giveawayIdStr);
+
+        console.log(`[Bot ${agentId}] Parsed command parameters:`, {
+          giveawayId,
+          walletAddress,
+          userId: ctx.from?.id
+        });
+
+        if (isNaN(giveawayId)) {
+          console.log(`[Bot ${agentId}] Invalid giveaway ID:`, giveawayIdStr);
+          return ctx.reply("Please provide a valid giveaway ID number");
+        }
+
+        if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
+          console.log(`[Bot ${agentId}] Invalid wallet address:`, walletAddress);
+          return ctx.reply("Please provide a valid Ethereum wallet address starting with 0x");
+        }
+
+        console.log(`[Bot ${agentId}] Fetching giveaway:`, giveawayId);
+        const [giveaway] = await db
+          .select()
+          .from(giveaways)
+          .where(eq(giveaways.id, giveawayId))
+          .limit(1);
+
+        console.log(`[Bot ${agentId}] Found giveaway:`, giveaway);
+
+        if (!giveaway) {
+          return ctx.reply(`Giveaway #${giveawayId} not found`);
+        }
+
+        if (new Date() > giveaway.endTime) {
+          return ctx.reply(`Giveaway #${giveawayId} has already ended`);
+        }
+
+        if (!ctx.from?.id) {
+          console.log(`[Bot ${agentId}] No user ID found in context`);
+          return ctx.reply("Could not identify you. Please try again.");
+        }
+
+        const userId = ctx.from.id.toString();
+
+        console.log(`[Bot ${agentId}] Checking for existing entry:`, {
+          userId,
+          giveawayId
+        });
+
+        const [existingEntry] = await db
+          .select()
+          .from(giveawayEntries)
+          .where(and(
+            eq(giveawayEntries.giveawayId, giveaway.id),
+            eq(giveawayEntries.userId, userId)
+          ))
+          .limit(1);
+
+        if (existingEntry) {
+          console.log(`[Bot ${agentId}] User already entered:`, {
+            userId,
+            giveawayId
+          });
+          return ctx.reply("You have already entered this giveaway!");
+        }
+
+        console.log(`[Bot ${agentId}] Creating new entry:`, {
+          userId,
+          giveawayId,
+          walletAddress
+        });
+
+        await db.insert(giveawayEntries).values({
+          giveawayId: giveaway.id,
+          userId,
+          walletAddress,
+        });
+
+        const replyMessage = "🎉 Success! You've been entered into the giveaway!\n\n" +
+          `Prize: ${giveaway.prize}\n` +
+          `Your wallet: ${walletAddress}\n\n` +
+          "Good luck! Winners will be announced in the channel.";
+
+        console.log(`[Bot ${agentId}] Sending success message to user:`, {
+          userId,
+          giveawayId
+        });
+
+        const reply = await ctx.reply(replyMessage);
+        console.log(`[Bot ${agentId}] Success message sent:`, reply);
+
+      } catch (error) {
+        console.error(`[Bot ${agentId}] Error in enter command handler:`, error);
+        return ctx.reply("Sorry, something went wrong. Please try again.");
+      }
+    };
+
+    // Register handlers with debug logging
+    console.log(`[Bot ${agentId}] Registering command handlers...`);
+
+    bot.command('enter', (ctx) => {
+      console.log(`[Bot ${agentId}] Command 'enter' triggered via command()`);
+      return handleEnterCommand(ctx);
+    });
+
+    bot.hears(/^\/enter/, (ctx) => {
+      console.log(`[Bot ${agentId}] Command 'enter' triggered via hears()`);
+      return handleEnterCommand(ctx);
     });
 
     const handleGiveawayCommand = async (ctx: Context) => {
@@ -519,120 +673,20 @@ class BotManager {
       }
     };
 
-    const handleEnterCommand = async (ctx: Context) => {
-      console.log(`[Bot ${agentId}] Enter command triggered:`, {
-        text: ctx.message?.text,
-        from: ctx.from?.id,
-        chat: ctx.chat?.id,
-        type: ctx.updateType
-      });
+    bot.command("giveaway", (ctx) => {
+      console.log(`[Bot ${agentId}] Command 'giveaway' triggered`);
+      return handleGiveawayCommand(ctx);
+    });
 
-      try {
-        const text = ctx.message?.text || '';
-        const parts = text.split(' ');
-
-        if (parts.length !== 3) {
-          return ctx.reply(
-            "Please provide both the giveaway ID and your wallet address.\n" +
-            "Format: /enter <giveaway-id> <wallet-address>\n" +
-            "Example: /enter 8 0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
-          );
-        }
-
-        const [, giveawayIdStr, walletAddress] = parts;
-        const giveawayId = parseInt(giveawayIdStr);
-
-        console.log(`[Bot ${agentId}] Processing entry:`, {
-          giveawayId,
-          walletAddress,
-          userId: ctx.from?.id
-        });
-
-        if (isNaN(giveawayId)) {
-          return ctx.reply("Please provide a valid giveaway ID number");
-        }
-
-        if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
-          return ctx.reply("Please provide a valid Ethereum wallet address starting with 0x");
-        }
-
-        const [giveaway] = await db
-          .select()
-          .from(giveaways)
-          .where(eq(giveaways.id, giveawayId))
-          .limit(1);
-
-        console.log(`[Bot ${agentId}] Found giveaway:`, giveaway);
-
-        if (!giveaway) {
-          return ctx.reply(`Giveaway #${giveawayId} not found`);
-        }
-
-        if (new Date() > giveaway.endTime) {
-          return ctx.reply(`Giveaway #${giveawayId} has already ended`);
-        }
-
-        if (!ctx.from?.id) {
-          return ctx.reply("Could not identify you. Please try again.");
-        }
-
-        const userId = ctx.from.id.toString();
-
-        const [existingEntry] = await db
-          .select()
-          .from(giveawayEntries)
-          .where(and(
-            eq(giveawayEntries.giveawayId, giveaway.id),
-            eq(giveawayEntries.userId, userId)
-          ))
-          .limit(1);
-
-        console.log(`[Bot ${agentId}] Checking existing entry:`, {
-          userId,
-          giveawayId,
-          hasExisting: !!existingEntry
-        });
-
-        if (existingEntry) {
-          return ctx.reply("You have already entered this giveaway!");
-        }
-
-        await db.insert(giveawayEntries).values({
-          giveawayId: giveaway.id,
-          userId,
-          walletAddress,
-        });
-
-        console.log(`[Bot ${agentId}] Successfully entered user into giveaway:`, {
-          userId,
-          giveawayId,
-          walletAddress
-        });
-
-        const replyMessage = "🎉 Success! You've been entered into the giveaway!\n\n" +
-          `Prize: ${giveaway.prize}\n` +
-          `Your wallet: ${walletAddress}\n\n` +
-          "Good luck! Winners will be announced in the channel.";
-
-        await ctx.reply(replyMessage);
-        console.log(`[Bot ${agentId}] Sent success message to user`);
-
-      } catch (error) {
-        console.error(`[Bot ${agentId}] Error processing entry:`, error);
-        return ctx.reply("Sorry, something went wrong. Please try again.");
-      }
-    };
-
-    // Register command handlers
-    bot.command('enter', handleEnterCommand);
-    bot.hears(/^\/enter/, handleEnterCommand);
-    bot.command("giveaway", handleGiveawayCommand);
     bot.on('channel_post', (ctx, next) => {
       if (ctx.channelPost?.text?.startsWith('/giveaway')) {
+        console.log(`[Bot ${agentId}] Channel post giveaway command triggered`);
         return handleGiveawayCommand(ctx);
       }
       return next();
     });
+
+    console.log(`[Bot ${agentId}] Giveaway commands setup completed`);
   };
 
 
