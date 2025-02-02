@@ -12,6 +12,7 @@ import {
   FormControl,
   FormField,
   FormItem,
+  FormLabel,
   FormMessage,
 } from "@/components/ui/form";
 
@@ -29,13 +30,18 @@ export default function AuthPage() {
     return <Redirect to="/" />;
   }
 
-  const onSubmit = (isLogin: boolean) => form.handleSubmit((data) => {
-    if (isLogin) {
-      loginMutation.mutate(data);
-    } else {
-      registerMutation.mutate(data);
-    }
-  });
+  const onSubmit = (isLogin: boolean) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    form.handleSubmit((data) => {
+      if (form.formState.isValid) {
+        if (isLogin) {
+          loginMutation.mutate(data);
+        } else {
+          registerMutation.mutate(data);
+        }
+      }
+    })();
+  };
 
   const isLoading = loginMutation.isPending || registerMutation.isPending;
 
@@ -48,14 +54,15 @@ export default function AuthPage() {
           </CardHeader>
           <CardContent>
             <Form {...form}>
-              <form className="space-y-4">
+              <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
                 <FormField
                   control={form.control}
                   name="username"
                   render={({ field }) => (
                     <FormItem>
+                      <FormLabel>Username</FormLabel>
                       <FormControl>
-                        <Input placeholder="Username" {...field} />
+                        <Input placeholder="Enter username" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -66,8 +73,9 @@ export default function AuthPage() {
                   name="password"
                   render={({ field }) => (
                     <FormItem>
+                      <FormLabel>Password</FormLabel>
                       <FormControl>
-                        <Input type="password" placeholder="Password" {...field} />
+                        <Input type="password" placeholder="Enter password" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -78,7 +86,7 @@ export default function AuthPage() {
                     type="submit"
                     className="flex-1"
                     onClick={onSubmit(true)}
-                    disabled={isLoading}
+                    disabled={isLoading || !form.formState.isValid}
                   >
                     {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Login
@@ -88,7 +96,7 @@ export default function AuthPage() {
                     variant="outline"
                     className="flex-1"
                     onClick={onSubmit(false)}
-                    disabled={isLoading}
+                    disabled={isLoading || !form.formState.isValid}
                   >
                     Register
                   </Button>
