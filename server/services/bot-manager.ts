@@ -329,6 +329,7 @@ class BotManager {
               await ctx.reply('An error occurred while ending the giveaway.');
             }
           }));
+
         } catch (dbError) {
           console.error(`[Bot ${agentId}] Database error creating giveaway:`, dbError);
           await ctx.reply('Failed to create giveaway due to a database error. Please try again.');
@@ -384,9 +385,11 @@ class BotManager {
     const bot = this.bots.get(agentId);
     if (bot) {
       try {
+        console.log(`[Bot ${agentId}] Stopping bot...`);
         await bot.stop();
+        console.log(`[Bot ${agentId}] Bot stopped successfully`);
       } catch (error) {
-        console.error(`Error stopping bot ${agentId}:`, error);
+        console.error(`[Bot ${agentId}] Error stopping bot:`, error);
       }
       this.bots.delete(agentId);
     }
