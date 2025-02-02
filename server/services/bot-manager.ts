@@ -239,14 +239,29 @@ class BotManager {
         const endTime = new Date();
         endTime.setHours(endTime.getHours() + durationHours);
 
-        console.log(`[Bot ${agentId}] Creating giveaway in database:`, {
+        console.log(`[Bot ${agentId}] Creating giveaway in database with values:`, {
           agentId,
           prize,
-          startTime: new Date(),
-          endTime,
+          startTime: new Date().toISOString(),
+          endTime: endTime.toISOString(),
         });
 
         try {
+          // First verify the agent exists
+          const [agentCheck] = await db
+            .select()
+            .from(agents)
+            .where(eq(agents.id, agentId))
+            .limit(1);
+
+          if (!agentCheck) {
+            console.error(`[Bot ${agentId}] Agent not found in database`);
+            throw new Error('Agent not found');
+          }
+
+          console.log(`[Bot ${agentId}] Agent verified:`, agentCheck);
+
+          // Create the giveaway
           const [giveaway] = await db.insert(giveaways).values({
             agentId,
             prize,
@@ -263,43 +278,55 @@ class BotManager {
             .where(eq(giveaways.id, giveaway.id))
             .limit(1);
 
+          if (!verifyGiveaway) {
+            console.error(`[Bot ${agentId}] Failed to verify giveaway creation`);
+            throw new Error('Failed to verify giveaway creation');
+          }
+
           console.log(`[Bot ${agentId}] Verified giveaway in database:`, verifyGiveaway);
 
+          // Send confirmation message
           await ctx.reply(
             `🎉 New Giveaway!\n\nPrize: ${giveaway.prize}\nEnds in: ${durationHours < 1 ? `${Math.round(durationHours * 60)} minutes` : `${durationHours} hours`}\n\nEnter using: /enter ${giveaway.id}`
           );
 
           // Schedule giveaway end
           this.jobs.set(giveaway.id, schedule.scheduleJob(endTime, async () => {
-            const entries = await db
-              .select()
-              .from(giveawayEntries)
-              .where(eq(giveawayEntries.giveawayId, giveaway.id));
+            try {
+              const entries = await db
+                .select()
+                .from(giveawayEntries)
+                .where(eq(giveawayEntries.giveawayId, giveaway.id));
 
-            if (entries.length === 0) {
-              await ctx.reply(`Giveaway for ${giveaway.prize} ended with no participants!`);
-              return;
+              if (entries.length === 0) {
+                await ctx.reply(`Giveaway for ${giveaway.prize} ended with no participants!`);
+                return;
+              }
+
+              // Pick random winner
+              const winner = entries[Math.floor(Math.random() * entries.length)];
+
+              await db
+                .update(giveaways)
+                .set({ winnerId: winner.userId })
+                .where(eq(giveaways.id, giveaway.id));
+
+              await ctx.reply(
+                `🎉 Giveaway Ended!\n\nPrize: ${giveaway.prize}\nWinner: @${winner.userId}\n\nCongratulations!`
+              );
+            } catch (endError) {
+              console.error(`[Bot ${agentId}] Error ending giveaway:`, endError);
+              await ctx.reply('An error occurred while ending the giveaway.');
             }
-
-            // Pick random winner
-            const winner = entries[Math.floor(Math.random() * entries.length)];
-
-            await db
-              .update(giveaways)
-              .set({ winnerId: winner.userId })
-              .where(eq(giveaways.id, giveaway.id));
-
-            await ctx.reply(
-              `🎉 Giveaway Ended!\n\nPrize: ${giveaway.prize}\nWinner: @${winner.userId}\n\nCongratulations!`
-            );
           }));
         } catch (dbError) {
           console.error(`[Bot ${agentId}] Database error creating giveaway:`, dbError);
+          await ctx.reply('Failed to create giveaway due to a database error. Please try again.');
           throw dbError;
         }
       } catch (error) {
-        console.error(`[Bot ${agentId}] Error creating giveaway:`, error);
-        ctx.reply("Failed to create giveaway. Please try again.");
+        console.error(`[Bot ${agentId}] Error handling giveaway command:`, error);
+        await ctx.reply("Failed to create giveaway. Please try again.");
       }
     });
 
