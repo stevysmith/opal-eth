@@ -65,9 +65,13 @@ export default function AgentDetailsPage() {
         throw new Error(data.error || "Failed to fetch agent");
       }
       const data = await response.json();
+      if (!data || !data.id) {
+        throw new Error("Agent not found");
+      }
       return data;
     },
     enabled: !!agentId,
+    retry: false
   });
 
   if (isLoading) {
