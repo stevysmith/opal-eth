@@ -1,0 +1,64 @@
+import { useState } from "react";
+import { useLocation } from "wouter";
+import { Button } from "@/components/ui/button";
+import { TemplateCard } from "@/components/wizard/TemplateCard";
+import { MessageSquare, Award, BarChart3 } from "lucide-react";
+
+const templates = [
+  {
+    id: "qa",
+    title: "Q&A Bot",
+    description: "Create an interactive Q&A session with your audience",
+    icon: <MessageSquare className="h-5 w-5" />,
+  },
+  {
+    id: "giveaway",
+    title: "Giveaway",
+    description: "Run engaging giveaways and select winners automatically",
+    icon: <Award className="h-5 w-5" />,
+  },
+  {
+    id: "poll",
+    title: "Poll Bot",
+    description: "Create polls and gather feedback from your community",
+    icon: <BarChart3 className="h-5 w-5" />,
+  },
+];
+
+export default function TemplateStep() {
+  const [selected, setSelected] = useState<string>();
+  const [, navigate] = useLocation();
+
+  return (
+    <div className="max-w-3xl mx-auto space-y-8">
+      <div>
+        <h2 className="text-2xl font-bold mb-2">Choose a Template</h2>
+        <p className="text-muted-foreground">
+          Select a template to get started with your social media bot
+        </p>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {templates.map((template) => (
+          <TemplateCard
+            key={template.id}
+            title={template.title}
+            description={template.description}
+            icon={template.icon}
+            selected={selected === template.id}
+            onClick={() => setSelected(template.id)}
+          />
+        ))}
+      </div>
+
+      <div className="flex justify-end">
+        <Button
+          onClick={() => navigate("/wizard/persona")}
+          disabled={!selected}
+        >
+          Continue
+        </Button>
+      </div>
+    </div>
+  );
+}
