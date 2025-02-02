@@ -279,46 +279,70 @@ export function registerRoutes(app: Express): Server {
       const [agent] = await db
         .select()
         .from(agents)
-        .where(eq(agents.id, agentId))
+        .where(and(
+          eq(agents.id, agentId),
+          eq(agents.userId, req.user.id)
+        ))
         .limit(1);
 
-      if (!agent || agent.userId !== req.user.id) {
+      if (!agent) {
         return res.status(404).json({ error: "Agent not found" });
       }
 
       if (agent.active) {
-        await botManager.stopAgent(agent.id);
-        const [updatedAgent] = await db
-          .update(agents)
-          .set({ active: false })
-          .where(eq(agents.id, agent.id))
-          .returning();
-        res.json(updatedAgent);
-      } else {
         try {
-          const success = await botManager.initializeAgent(agent.id);
+          console.log(`Stopping agent ${agentId}...`);
+          await botManager.stopAgent(agent.id);
+          console.log(`Successfully stopped agent ${agentId}`);
+
           const [updatedAgent] = await db
             .update(agents)
-            .set({ active: success }) // Only set active if initialization succeeded
+            .set({ active: false })
             .where(eq(agents.id, agent.id))
             .returning();
+
+          res.json(updatedAgent);
+        } catch (error) {
+          console.error("Error stopping bot:", error);
+          res.status(500).json({ 
+            error: "Failed to stop bot",
+            details: error instanceof Error ? error.message : "Unknown error"
+          });
+        }
+      } else {
+        try {
+          console.log(`Starting agent ${agentId}...`);
+          const success = await botManager.initializeAgent(agent.id);
+          console.log(`Agent ${agentId} initialization ${success ? 'succeeded' : 'failed'}`);
+
+          const [updatedAgent] = await db
+            .update(agents)
+            .set({ active: success })
+            .where(eq(agents.id, agent.id))
+            .returning();
+
           res.json(updatedAgent);
         } catch (error) {
           console.error("Error initializing bot:", error);
-          // If it's just a launch timeout but messages work, consider it a success
-          if (error instanceof Error && error.message === "Launch timeout") {
+          if (error instanceof Error && error.message === "Bot initialization timed out") {
             const [updatedAgent] = await db
               .update(agents)
-              .set({ active: true })
+              .set({ active: false })
               .where(eq(agents.id, agent.id))
               .returning();
-            res.json(updatedAgent);
+
+            res.status(500).json({ 
+              ...updatedAgent,
+              error: "Bot initialization timed out",
+              message: "Failed to initialize bot. Please try again."
+            });
           } else {
             const [updatedAgent] = await db
               .update(agents)
               .set({ active: false })
               .where(eq(agents.id, agent.id))
               .returning();
+
             res.status(500).json({ 
               ...updatedAgent,
               error: "Failed to initialize bot",
@@ -329,7 +353,10 @@ export function registerRoutes(app: Express): Server {
       }
     } catch (error) {
       console.error("Error toggling agent:", error);
-      res.status(500).json({ error: "Failed to toggle agent" });
+      res.status(500).json({ 
+        error: "Failed to toggle agent",
+        details: error instanceof Error ? error.message : "Unknown error" 
+      });
     }
   });
 

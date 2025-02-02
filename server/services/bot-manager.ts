@@ -14,8 +14,10 @@ class BotManager {
     if (bot) {
       try {
         console.log(`[Bot ${agentId}] Stopping bot...`);
+        // First stop the bot
         await bot.stop();
         console.log(`[Bot ${agentId}] Bot stopped successfully`);
+
         // Remove all jobs associated with this agent
         for (const [jobId, job] of this.jobs.entries()) {
           if (jobId === agentId) {
@@ -23,12 +25,19 @@ class BotManager {
             this.jobs.delete(jobId);
           }
         }
-        // Wait a bit after stopping to ensure cleanup
+
+        // Wait for cleanup to complete
         await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // Remove bot from the map
+        this.bots.delete(agentId);
+        console.log(`[Bot ${agentId}] Cleanup completed`);
       } catch (error) {
         console.error(`[Bot ${agentId}] Error stopping bot:`, error);
+        throw error;
       }
-      this.bots.delete(agentId);
+    } else {
+      console.log(`[Bot ${agentId}] No active bot found to stop`);
     }
   }
 
