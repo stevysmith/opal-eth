@@ -60,33 +60,27 @@ class BotManager {
     return this.bots.has(agentId);
   }
 
-  private async initializeBotInstance(agentId: number, token: string, channelId: string) {
-    console.log(`[Bot ${agentId}] Creating bot instance with token length:`, token.length);
+  private initializeBotInstance(agentId: number, token: string, channelId: string) {
+    console.log(`[Bot ${agentId}] Creating bot instance...`);
 
     const bot = new Telegraf(token);
 
-    // Add middleware for logging all updates first
-    bot.use(async (ctx, next) => {
-      console.log(`[Bot ${agentId}] Received update:`, {
-        type: ctx.updateType,
-        message: ctx.message ? {
-          text: ctx.message.text,
-          from: ctx.message.from,
-          chat: ctx.message.chat
-        } : undefined,
-        from: ctx.from,
-        chat: ctx.chat
+    // Add error handling
+    bot.catch((err, ctx) => {
+      console.error(`[Bot ${agentId}] Error in bot:`, {
+        error: err,
+        update: ctx.update,
+        chat: ctx.chat?.id,
+        from: ctx.from?.id
       });
-      await next();
-      console.log(`[Bot ${agentId}] Finished processing update for ${ctx.updateType}`);
     });
 
-    // Debug logging for command routing
-    bot.use((ctx, next) => {
+    // Command matching debug middleware
+     bot.use((ctx, next) => {
       if (ctx.message?.text?.startsWith('/')) {
-        console.log(`[Bot ${agentId}] Processing command:`, {
+        console.log(`[Bot ${agentId}] Command detected:`, {
           command: ctx.message.text.split(' ')[0],
-          fullText: ctx.message.text,
+          full: ctx.message.text,
           from: ctx.from?.id,
           chat: ctx.chat?.id
         });
@@ -94,80 +88,161 @@ class BotManager {
       return next();
     });
 
-    try {
-      console.log(`[Bot ${agentId}] Testing bot connection...`);
-      const me = await bot.telegram.getMe();
-      console.log(`[Bot ${agentId}] Bot info:`, me);
 
-      const formattedChannelId = channelId.startsWith('@') ? channelId : `@${channelId}`;
-      console.log(`[Bot ${agentId}] Testing channel access for ${formattedChannelId}...`);
-
-      let finalChannelId: string;
-      try {
-        const chat = await bot.telegram.getChat(formattedChannelId);
-        console.log(`[Bot ${agentId}] Successfully accessed channel:`, {
-          id: chat.id,
-          type: chat.type,
-          title: 'title' in chat ? chat.title : undefined
-        });
-        finalChannelId = chat.id.toString();
-      } catch (firstError) {
-        console.log(`[Bot ${agentId}] Failed with @ format, trying numeric ID...`);
-        try {
-          const numericId = channelId.replace('@', '');
-          const chat = await bot.telegram.getChat(numericId);
-          console.log(`[Bot ${agentId}] Successfully accessed channel with numeric ID:`, {
-            id: chat.id,
-            type: chat.type,
-            title: 'title' in chat ? chat.title : undefined
-          });
-          finalChannelId = numericId;
-        } catch (secondError) {
-          throw new Error(
-            `Cannot access channel ${channelId}. Error: ${firstError.message}\n` +
-            'Please ensure:\n' +
-            '1. The channel ID is correct\n' +
-            '2. The bot is added to the channel\n' +
-            '3. The bot is an administrator in the channel'
-          );
-        }
-      }
+    // General logging middleware
+    bot.use(async (ctx, next) => {
+      console.log(`[Bot ${agentId}] Incoming update:`, {
+        type: ctx.updateType,
+        text: ctx.message?.text,
+        from: ctx.from?.id,
+        chat: ctx.chat?.id,
+        isCommand: ctx.message?.text?.startsWith('/')
+      });
 
       try {
-        console.log(`[Bot ${agentId}] Testing message sending to channel ${finalChannelId}...`);
-        const testMessage = await bot.telegram.sendMessage(
-          finalChannelId,
-          '🤖 Bot test message - initializing...'
-        );
-        console.log(`[Bot ${agentId}] Test message sent successfully:`, testMessage);
-
-        bot.launch().catch(error => {
-          console.log(`[Bot ${agentId}] Background launch error (can be ignored if bot is working):`, error.message);
-        });
-
-        return { bot, channelId: finalChannelId };
+        await next();
       } catch (error) {
-        throw new Error(
-          `Failed to send message to channel. Error: ${error.message}\n` +
-          'Please ensure the bot has posting permissions in the channel.'
-        );
+        console.error(`[Bot ${agentId}] Error in middleware:`, error);
+        throw error;
       }
+    });
+
+    return bot;
+  }
+
+
+    private async setupBotCommands(bot: Telegraf<Context<Update>>, agentId: number) {
+    try {
+      console.log(`[Bot ${agentId}] Setting up bot commands...`);
+
+      // Register additional command handlers
+      bot.command('start', (ctx) => {
+        console.log(`[Bot ${agentId}] Start command received`);
+        return ctx.reply(`👋 Welcome! Use /enter <giveaway-id> <wallet-address> to participate in giveaways!`);
+      });
+
+      bot.command('help', (ctx) => {
+        console.log(`[Bot ${agentId}] Help command received`);
+        return ctx.reply(`Available commands:\n${this.getCommandList('giveaway')}`);
+      });
+
+      // Add fallback message handler
+      bot.on('message', (ctx) => {
+        console.log(`[Bot ${agentId}] Message received:`, {
+          text: ctx.message?.text,
+          from: ctx.from?.id,
+          chat: ctx.chat?.id,
+          type: ctx.updateType
+        });
+
+        if (ctx.message?.text?.startsWith('/enter')) {
+          console.log(`[Bot ${agentId}] Enter command detected in message handler`);
+          return this.handleEnterCommand(ctx, agentId);
+        }
+      });
+
+      console.log(`[Bot ${agentId}] Bot commands setup completed`);
     } catch (error) {
-      console.error(`[Bot ${agentId}] Failed to initialize bot:`, error);
+      console.error(`[Bot ${agentId}] Error setting up commands:`, error);
       throw error;
     }
   }
+  private async handleEnterCommand(ctx: Context, agentId: number) {
+    console.log(`[Bot ${agentId}] Enter command handler executing:`, {
+      text: ctx.message?.text,
+      from: ctx.from?.id,
+      chat: ctx.chat?.id
+    });
+
+    try {
+      const text = ctx.message?.text || '';
+      const parts = text.split(' ');
+
+      console.log(`[Bot ${agentId}] Command parts:`, parts);
+
+      if (parts.length !== 3) {
+        return ctx.reply(
+          "Please provide both the giveaway ID and your wallet address.\n" +
+          "Format: /enter <giveaway-id> <wallet-address>\n" +
+          "Example: /enter 8 0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
+        );
+      }
+
+      const [, giveawayIdStr, walletAddress] = parts;
+      const giveawayId = parseInt(giveawayIdStr);
+
+      console.log(`[Bot ${agentId}] Processing entry:`, {
+        giveawayId,
+        walletAddress,
+        userId: ctx.from?.id
+      });
+
+      const [giveaway] = await db
+        .select()
+        .from(giveaways)
+        .where(eq(giveaways.id, giveawayId))
+        .limit(1);
+
+        console.log(`[Bot ${agentId}] Found giveaway:`, giveaway);
+
+      if (!giveaway) {
+        return ctx.reply(`Giveaway #${giveawayId} not found`);
+      }
+
+      if (new Date() > giveaway.endTime) {
+          return ctx.reply(`Giveaway #${giveawayId} has already ended`);
+      }
+
+      if (!ctx.from?.id) {
+        return ctx.reply("Could not identify you. Please try again.");
+      }
+
+
+      const [existingEntry] = await db
+        .select()
+        .from(giveawayEntries)
+        .where(and(
+            eq(giveawayEntries.giveawayId, giveaway.id),
+            eq(giveawayEntries.userId, ctx.from.id.toString())
+        ))
+        .limit(1);
+
+        if (existingEntry) {
+            return ctx.reply("You have already entered this giveaway!");
+        }
+
+
+      await db.insert(giveawayEntries).values({
+        giveawayId: giveaway.id,
+        userId: ctx.from.id.toString(),
+        walletAddress,
+      });
+
+        console.log(`[Bot ${agentId}] Entry recorded successfully`);
+
+
+      return ctx.reply(
+        "🎉 Success! You've been entered into the giveaway!\n\n" +
+        `Prize: ${giveaway.prize}\n` +
+        `Your wallet: ${walletAddress}\n\n` +
+        "Good luck! Winners will be announced in the channel."
+      );
+
+    } catch (error) {
+      console.error(`[Bot ${agentId}] Error processing entry:`, error);
+      return ctx.reply("Sorry, something went wrong. Please try again.");
+    }
+  }
+
 
   async initializeAgent(agentId: number) {
     try {
-      console.log(`[Bot ${agentId}] Stopping existing bot instance if any...`);
+      console.log(`[Bot ${agentId}] Starting agent initialization...`);
+
+      // Stop any existing instance
       await this.stopAgent(agentId);
-      await new Promise(resolve => setTimeout(resolve, 5000));
 
-      console.log(`[Bot ${agentId}] Initializing new agent...`);
-
-      const [agent] = await db
-        .select()
+      const [agent] = await db.select()
         .from(agents)
         .where(eq(agents.id, agentId))
         .limit(1);
@@ -181,81 +256,28 @@ class BotManager {
         throw new Error("Missing Telegram bot token");
       }
 
-      await this.stopBotWithToken(config.token);
+      // Initialize bot with commands
+      const bot = this.initializeBotInstance(agentId, config.token, config.channelId);
+      await this.setupBotCommands(bot, agentId);
 
-      const { bot, channelId: finalChannelId } = await this.initializeBotInstance(
-        agentId,
-        config.token,
-        config.channelId
-      );
+      // Launch bot
+      try {
+        console.log(`[Bot ${agentId}] Launching bot...`);
+        await bot.launch();
+        console.log(`[Bot ${agentId}] Bot launched successfully`);
 
-      console.log(`[Bot ${agentId}] Setting up command handlers...`);
-
-      bot.on('message', (ctx) => {
-        console.log(`[Bot ${agentId}] Basic message handler received:`, {
-          text: ctx.message?.text,
-          from: ctx.from,
-          chat: ctx.chat
-        });
-
-        if (ctx.message?.text?.startsWith('/enter')) {
-          console.log(`[Bot ${agentId}] Message identified as enter command`);
-          // Log the command matching attempt
-          console.log(`[Bot ${agentId}] Attempting to match enter command pattern:`, {
-            commandText: ctx.message.text,
-            matchPattern: '/enter'
-          });
-        } else if (ctx.message?.text?.startsWith('/')) {
-          console.log(`[Bot ${agentId}] Message identified as other command:`, {
-            commandText: ctx.message.text
-          });
-        }
-      });
-
-      bot.command("start", (ctx) => {
-        console.log(`[Bot ${agentId}] Start command received from:`, ctx.from);
-        ctx.reply(`👋 Welcome! I'm a ${agent.template} bot.\n\nAvailable commands:\n${this.getCommandList(agent.template)}`);
-      });
-
-      bot.command("help", (ctx) => {
-        ctx.reply(`Available commands:\n${this.getCommandList(agent.template)}`);
-      });
-
-      switch (agent.template) {
-        case "poll":
-          this.setupPollCommands(bot, agentId);
-          break;
-        case "giveaway":
-          this.setupGiveawayCommands(bot, agentId);
-          break;
-        case "qa":
-          this.setupQACommands(bot, agentId);
-          break;
+        this.bots.set(agentId, bot);
+        return true;
+      } catch (error) {
+        console.error(`[Bot ${agentId}] Error launching bot:`, error);
+        throw error;
       }
-
-      bot.catch((error, ctx) => {
-        console.error(`[Bot ${agentId}] Unhandled error:`, error);
-        ctx.reply("Sorry, something went wrong. Please try again later.");
-      });
-
-      this.tokenMap.set(config.token, agentId);
-      this.bots.set(agentId, bot);
-
-      console.log(`[Bot ${agentId}] Sending welcome message to channel...`);
-      await bot.telegram.sendMessage(
-        finalChannelId,
-        `🤖 Bot restarted and ready!\n\nTemplate: ${agent.template}\nName: ${agent.name}\n\nUse the following commands:\n${this.getCommandList(agent.template)}`
-      );
-      console.log(`[Bot ${agentId}] Welcome message sent successfully`);
-
-      return true;
     } catch (error) {
-      console.error(`[Bot ${agentId}] Failed to initialize:`, error);
+      console.error(`[Bot ${agentId}] Initialization failed:`, error);
       await this.stopAgent(agentId);
       throw error;
     }
   }
-
   private getCommandList(template: string): string {
     switch (template) {
       case "poll":
@@ -436,112 +458,149 @@ class BotManager {
   private setupGiveawayCommands = (bot: Telegraf<Context<Update>>, agentId: number) => {
     console.log(`[Bot ${agentId}] Setting up giveaway commands...`);
 
+      // Basic message handler for debugging command routing
+    bot.use((ctx, next) => {
+        if (ctx.message?.text?.startsWith('/')) {
+            console.log(`[Bot ${agentId}] Command routing middleware:`, {
+                command: ctx.message.text.split(' ')[0],
+                fullText: ctx.message.text,
+                from: ctx.from?.id,
+                chat: ctx.chat?.id,
+                updateType: ctx.updateType
+            });
+        }
+        return next();
+    });
 
-    // Register command handlers first
-    console.log(`[Bot ${agentId}] Registering command handlers...`);
 
     const handleEnterCommand = async (ctx: Context) => {
-      console.log(`[Bot ${agentId}] Enter command handler executing:`, {
-        text: ctx.message?.text,
-        from: ctx.from?.id,
-        chat: ctx.chat?.id,
-        type: ctx.updateType
-      });
-
-      try {
-        const text = ctx.message?.text || '';
-        console.log(`[Bot ${agentId}] Processing enter command text:`, text);
-
-        const parts = text.split(' ');
-        console.log(`[Bot ${agentId}] Command parts:`, parts);
-
-        if (parts.length !== 3) {
-          console.log(`[Bot ${agentId}] Invalid command format:`, { parts });
-          return ctx.reply(
-            "Please provide both the giveaway ID and your wallet address.\n" +
-            "Format: /enter <giveaway-id> <wallet-address>\n" +
-            "Example: /enter 8 0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
-          );
-        }
-
-        const [, giveawayIdStr, walletAddress] = parts;
-        const giveawayId = parseInt(giveawayIdStr);
-
-        console.log(`[Bot ${agentId}] Processing entry:`, {
-          giveawayId,
-          walletAddress,
-          userId: ctx.from?.id
+        console.log(`[Bot ${agentId}] Enter command handler START:`, {
+            text: ctx.message?.text,
+            from: ctx.from?.id,
+            chat: ctx.chat?.id,
+            type: ctx.updateType,
+            handlerType: 'enter'
         });
-
-        if (isNaN(giveawayId)) {
-          return ctx.reply("Please provide a valid giveaway ID number");
+    
+        try {
+            const text = ctx.message?.text || '';
+            console.log(`[Bot ${agentId}] Processing enter command text:`, text);
+    
+            const parts = text.split(' ');
+            console.log(`[Bot ${agentId}] Command parts:`, parts);
+    
+            if (parts.length !== 3) {
+                console.log(`[Bot ${agentId}] Invalid command format:`, { parts });
+                return ctx.reply(
+                    "Please provide both the giveaway ID and your wallet address.\n" +
+                    "Format: /enter <giveaway-id> <wallet-address>\n" +
+                    "Example: /enter 8 0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
+                );
+            }
+    
+            const [, giveawayIdStr, walletAddress] = parts;
+            const giveawayId = parseInt(giveawayIdStr);
+    
+            console.log(`[Bot ${agentId}] Processing entry:`, {
+                giveawayId,
+                walletAddress,
+                userId: ctx.from?.id
+            });
+    
+            if (isNaN(giveawayId)) {
+                return ctx.reply("Please provide a valid giveaway ID number");
+            }
+    
+            if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
+                return ctx.reply("Please provide a valid Ethereum wallet address starting with 0x");
+            }
+    
+            const [giveaway] = await db
+                .select()
+                .from(giveaways)
+                .where(eq(giveaways.id, giveawayId))
+                .limit(1);
+    
+            if (!giveaway) {
+                return ctx.reply(`Giveaway #${giveawayId} not found`);
+            }
+    
+             if (new Date() > giveaway.endTime) {
+              return ctx.reply(`Giveaway #${giveawayId} has already ended`);
+            }
+            
+           if (!ctx.from?.id) {
+                return ctx.reply("Could not identify you. Please try again.");
+            }
+            
+            const userId = ctx.from.id.toString();
+            
+            const [existingEntry] = await db
+                .select()
+                .from(giveawayEntries)
+                .where(and(
+                    eq(giveawayEntries.giveawayId, giveaway.id),
+                    eq(giveawayEntries.userId, userId)
+                ))
+                .limit(1);
+            
+            if (existingEntry) {
+                return ctx.reply("You have already entered this giveaway!");
+            }
+    
+            await db.insert(giveawayEntries).values({
+                giveawayId: giveaway.id,
+                userId,
+                walletAddress,
+            });
+    
+            return ctx.reply(
+                "🎉 Success! You've been entered into the giveaway!\n\n" +
+                `Prize: ${giveaway.prize}\n` +
+                `Your wallet: ${walletAddress}\n\n` +
+                "Good luck! Winners will be announced in the channel."
+            );
+    
+        } catch (error) {
+            console.error(`[Bot ${agentId}] Error processing entry:`, error);
+            return ctx.reply("Sorry, something went wrong. Please try again.");
         }
-
-        if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
-          return ctx.reply("Please provide a valid Ethereum wallet address starting with 0x");
-        }
-
-        const [giveaway] = await db
-          .select()
-          .from(giveaways)
-          .where(eq(giveaways.id, giveawayId))
-          .limit(1);
-
-        if (!giveaway) {
-          return ctx.reply(`Giveaway #${giveawayId} not found`);
-        }
-
-        if (new Date() > giveaway.endTime) {
-          return ctx.reply(`Giveaway #${giveawayId} has already ended`);
-        }
-
-        if (!ctx.from?.id) {
-          return ctx.reply("Could not identify you. Please try again.");
-        }
-
-        const userId = ctx.from.id.toString();
-
-        const [existingEntry] = await db
-          .select()
-          .from(giveawayEntries)
-          .where(and(
-            eq(giveawayEntries.giveawayId, giveaway.id),
-            eq(giveawayEntries.userId, userId)
-          ))
-          .limit(1);
-
-        if (existingEntry) {
-          return ctx.reply("You have already entered this giveaway!");
-        }
-
-        await db.insert(giveawayEntries).values({
-          giveawayId: giveaway.id,
-          userId,
-          walletAddress,
-        });
-
-        return ctx.reply(
-          "🎉 Success! You've been entered into the giveaway!\n\n" +
-          `Prize: ${giveaway.prize}\n` +
-          `Your wallet: ${walletAddress}\n\n` +
-          "Good luck! Winners will be announced in the channel."
-        );
-
-      } catch (error) {
-        console.error(`[Bot ${agentId}] Error processing entry:`, error);
-        return ctx.reply("Sorry, something went wrong. Please try again.");
-      }
     };
 
-    // Register both command and pattern matching for /enter
+    // Register handlers for both direct messages and channel posts
+    console.log(`[Bot ${agentId}] Registering enter command handlers...`);
+
+
     bot.command('enter', (ctx) => {
-      console.log(`[Bot ${agentId}] Command 'enter' matched via command()`);
+      console.log(`[Bot ${agentId}] Enter command triggered via command() handler`);
+      return handleEnterCommand(ctx);
+    });
+
+    bot.action(/^enter/, (ctx) => {
+      console.log(`[Bot ${agentId}] Enter command triggered via action() handler`);
       return handleEnterCommand(ctx);
     });
 
     bot.hears(/^\/enter/, (ctx) => {
-      console.log(`[Bot ${agentId}] Command 'enter' matched via hears()`);
-      return handleEnterCommand(ctx);
+       console.log(`[Bot ${agentId}] Enter command triggered via hears() handler`);
+        return handleEnterCommand(ctx);
+    });
+
+    // Add a catch-all message handler for commands
+    bot.on('message', (ctx, next) => {
+      console.log(`[Bot ${agentId}] Message handler:`, {
+        text: ctx.message?.text,
+        isCommand: ctx.message?.text?.startsWith('/'),
+        from: ctx.from?.id,
+        chat: ctx.chat?.id
+      });
+
+        if (ctx.message?.text?.startsWith('/enter')) {
+            console.log(`[Bot ${agentId}] Routing /enter command to handler`);
+            return handleEnterCommand(ctx);
+        }
+
+      return next();
     });
 
 
@@ -585,7 +644,7 @@ class BotManager {
           `🎉 New Giveaway!\n\n` +
           `Prize: ${prize.trim()}\n` +
           `Duration: ${durationHours < 1 ? `${Math.round(durationHours * 60)} minutes` : `${durationHours} hours`}\n\n` +
-          `To participate:\n` +
+           `To participate:\n` +
           `1. Open a direct message with @${me.username}\n` +
           `2. Send the command: /enter ${giveaway.id} <your-wallet-address>\n\n` +
           `Example: /enter ${giveaway.id} 0x742d35Cc6634C0532925a3b844Bc454e4438f44e\n\n` +
@@ -608,30 +667,30 @@ class BotManager {
 
             const winner = entries[Math.floor(Math.random() * entries.length)];
             try {
-              const payoutResult = await giveawayPayoutService.processGiveawayWinner(giveaway.id, winner.userId);
-              await ctx.reply(
-                `🎉 Giveaway Ended!\n\n` +
-                `Prize: ${prize}\n` +
-                `Winner: @${winner.userId}\n` +
-                `💰 USDC Payment Sent!\n` +
-                `Amount: ${payoutResult.amount} USDC\n` +
-                `Transaction: ${payoutResult.txHash}\n\n` +
-                `Congratulations!`
-              );
+                const payoutResult = await giveawayPayoutService.processGiveawayWinner(giveaway.id, winner.userId);
+                await ctx.reply(
+                    `🎉 Giveaway Ended!\n\n` +
+                    `Prize: ${prize}\n` +
+                    `Winner: @${winner.userId}\n` +
+                    `💰 USDC Payment Sent!\n` +
+                    `Amount: ${payoutResult.amount} USDC\n` +
+                    `Transaction: ${payoutResult.txHash}\n\n` +
+                    `Congratulations!`
+                  );
             } catch (error) {
-              console.error(`[Bot ${agentId}] Error processing payout:`, error);
-              await db
-                .update(giveaways)
-                .set({ winnerId: winner.userId })
-                .where(eq(giveaways.id, giveaway.id));
+                console.error(`[Bot ${agentId}] Error processing payout:`, error);
+                await db
+                    .update(giveaways)
+                    .set({ winnerId: winner.userId })
+                    .where(eq(giveaways.id, giveaway.id));
 
-              await ctx.reply(
-                `🎉 Giveaway Ended!\n\n` +
-                `Prize: ${prize}\n` +
-                `Winner: @${winner.userId}\n` +
-                `⚠️ Note: ${error instanceof Error ? error.message : 'Unknown error'}\n\n` +
-                `Congratulations to the winner! Our team will handle the payout manually.`
-              );
+                  await ctx.reply(
+                    `🎉 Giveaway Ended!\n\n` +
+                    `Prize: ${prize}\n` +
+                    `Winner: @${winner.userId}\n` +
+                      `⚠️ Note: ${error instanceof Error ? error.message : 'Unknown error'}\n\n` +
+                    `Congratulations to the winner! Our team will handle the payout manually.`
+                  );
             }
           } catch (error) {
             console.error(`[Bot ${agentId}] Error ending giveaway:`, error);
