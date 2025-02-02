@@ -37,24 +37,28 @@ export function registerRoutes(app: Express): Server {
             ]);
 
             // Update agent status to active
-            await db
+            const [updatedAgent] = await db
               .update(agents)
               .set({ active: true })
-              .where(eq(agents.id, agent.id));
-
-            agent.active = true;
+              .where(eq(agents.id, agent.id))
+              .returning();
 
             res.json({
-              ...agent,
+              ...updatedAgent,
               message: `Bot successfully initialized! Check ${config.channelId} for a welcome message.`
             });
             return;
           } catch (error) {
             console.error("Failed to initialize bot:", error);
             // Don't fail the request, just mark the agent as inactive and return with error details
-            agent.active = false;
+            const [updatedAgent] = await db
+              .update(agents)
+              .set({ active: false })
+              .where(eq(agents.id, agent.id))
+              .returning();
+
             res.json({
-              ...agent,
+              ...updatedAgent,
               error: error instanceof Error ? error.message : "Failed to initialize bot",
               message: "Bot creation succeeded but failed to connect. Make sure the bot token is valid and the bot is an admin in the channel."
             });
@@ -143,18 +147,28 @@ export function registerRoutes(app: Express): Server {
 
       if (agent.active) {
         await botManager.stopAgent(agent.id);
-        await db
+        const [updatedAgent] = await db
           .update(agents)
           .set({ active: false })
-          .where(eq(agents.id, agent.id));
-        res.json({ active: false });
+          .where(eq(agents.id, agent.id))
+          .returning();
+        res.json(updatedAgent);
       } else {
-        await botManager.initializeAgent(agent.id);
-        await db
-          .update(agents)
-          .set({ active: true })
-          .where(eq(agents.id, agent.id));
-        res.json({ active: true });
+        try {
+          await botManager.initializeAgent(agent.id);
+          const [updatedAgent] = await db
+            .update(agents)
+            .set({ active: true })
+            .where(eq(agents.id, agent.id))
+            .returning();
+          res.json(updatedAgent);
+        } catch (error) {
+          console.error("Error initializing bot:", error);
+          res.status(500).json({ 
+            error: "Failed to initialize bot",
+            details: error instanceof Error ? error.message : "Unknown error"
+          });
+        }
       }
     } catch (error) {
       console.error("Error toggling agent:", error);
