@@ -77,58 +77,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // List user's agents with active polls and giveaways
-  app.get("/api/agents", async (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
-
-    try {
-      const userAgents = await db
-        .select()
-        .from(agents)
-        .where(eq(agents.userId, req.user.id));
-
-      // Fetch active polls and giveaways for each agent
-      const enrichedAgents = await Promise.all(userAgents.map(async (agent) => {
-        const now = new Date();
-
-        const activePolls = agent.template === "poll" 
-          ? await db
-              .select()
-              .from(polls)
-              .where(
-                and(
-                  eq(polls.agentId, agent.id),
-                  gt(polls.endTime, now)
-                )
-              )
-          : [];
-
-        const activeGiveaways = agent.template === "giveaway"
-          ? await db
-              .select()
-              .from(giveaways)
-              .where(
-                and(
-                  eq(giveaways.agentId, agent.id),
-                  gt(giveaways.endTime, now)
-                )
-              )
-          : [];
-
-        return {
-          ...agent,
-          activePolls,
-          activeGiveaways,
-        };
-      }));
-
-      res.json(enrichedAgents);
-    } catch (error) {
-      console.error("Error fetching agents:", error);
-      res.status(500).json({ error: "Failed to fetch agents" });
-    }
-  });
-
   // Toggle agent activation
   app.post("/api/agents/:id/toggle", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
@@ -155,19 +103,35 @@ export function registerRoutes(app: Express): Server {
         res.json(updatedAgent);
       } else {
         try {
-          await botManager.initializeAgent(agent.id);
+          const success = await botManager.initializeAgent(agent.id);
           const [updatedAgent] = await db
             .update(agents)
-            .set({ active: true })
+            .set({ active: success }) // Only set active if initialization succeeded
             .where(eq(agents.id, agent.id))
             .returning();
           res.json(updatedAgent);
         } catch (error) {
           console.error("Error initializing bot:", error);
-          res.status(500).json({ 
-            error: "Failed to initialize bot",
-            details: error instanceof Error ? error.message : "Unknown error"
-          });
+          // If it's just a launch timeout but messages work, consider it a success
+          if (error instanceof Error && error.message === "Launch timeout") {
+            const [updatedAgent] = await db
+              .update(agents)
+              .set({ active: true })
+              .where(eq(agents.id, agent.id))
+              .returning();
+            res.json(updatedAgent);
+          } else {
+            const [updatedAgent] = await db
+              .update(agents)
+              .set({ active: false })
+              .where(eq(agents.id, agent.id))
+              .returning();
+            res.status(500).json({ 
+              ...updatedAgent,
+              error: "Failed to initialize bot",
+              details: error instanceof Error ? error.message : "Unknown error"
+            });
+          }
         }
       }
     } catch (error) {
