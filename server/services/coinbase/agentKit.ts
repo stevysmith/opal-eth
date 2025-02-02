@@ -1,32 +1,39 @@
-import { AgentKit } from '@coinbase/agentkit';
+
+import { AgentKit, CdpWalletProvider } from '@coinbase/agentkit';
 import { db } from "@db";
 import { mpcWallets } from "@db/schema";
 import { eq } from "drizzle-orm";
 
 interface AgentKitConfig {
-  apiKey: string;
-  apiSecret: string;
+  apiKeyName: string;
+  apiKeyPrivateKey: string;
 }
 
 class CoinbaseService {
   private agentKit: AgentKit;
-  private config: AgentKitConfig;
 
   constructor(config: AgentKitConfig) {
-    this.config = config;
-    this.agentKit = AgentKit.initialize({
-      apiKey: config.apiKey,
-      apiSecret: config.apiSecret,
-      environment: 'PRODUCTION'
+    this.initializeAgentKit(config);
+  }
+
+  private async initializeAgentKit(config: AgentKitConfig) {
+    const walletProvider = await CdpWalletProvider.configure({
+      apiKeyName: config.apiKeyName,
+      apiKeyPrivateKey: config.apiKeyPrivateKey,
+      networkId: process.env.NETWORK_ID || "base-sepolia",
+    });
+
+    this.agentKit = await AgentKit.from({
+      walletProvider,
+      actionProviders: []
     });
   }
 
   async createMpcWallet(agentId: number): Promise<string> {
     try {
-      // Create a new MPC wallet for the agent using the appropriate method
-      const wallet = await this.agentKit.createMPCWallet();
+      const walletProvider = await this.agentKit.getWalletProvider();
+      const wallet = await walletProvider.createWallet();
 
-      // Store wallet details in database
       await db.insert(mpcWallets).values({
         agentId,
         walletId: wallet.id,
@@ -42,10 +49,9 @@ class CoinbaseService {
 
   async getWalletBalance(walletId: string): Promise<string> {
     try {
-      const balance = await this.agentKit.getWalletBalance({
-        walletId,
-        currency: 'USDC'
-      });
+      const walletProvider = await this.agentKit.getWalletProvider();
+      const wallet = await walletProvider.getWallet(walletId);
+      const balance = await wallet.balance('USDC');
       return balance.toString();
     } catch (error) {
       console.error('Error getting wallet balance:', error);
@@ -55,14 +61,14 @@ class CoinbaseService {
 
   async sendUsdc(fromWalletId: string, toAddress: string, amount: string): Promise<string> {
     try {
-      const transaction = await this.agentKit.createTransaction({
-        fromWalletId,
-        toAddress,
+      const walletProvider = await this.agentKit.getWalletProvider();
+      const wallet = await walletProvider.getWallet(fromWalletId);
+      const tx = await wallet.send({
+        to: toAddress,
         amount,
-        currency: 'USDC'
+        asset: 'USDC'
       });
-
-      return transaction.id;
+      return tx.hash;
     } catch (error) {
       console.error('Error sending USDC:', error);
       throw new Error('Failed to send USDC');
@@ -80,10 +86,9 @@ class CoinbaseService {
   }
 }
 
-// Create singleton instance with environment variables
 const coinbaseService = new CoinbaseService({
-  apiKey: process.env.COINBASE_AGENTKIT_API_KEY!,
-  apiSecret: process.env.COINBASE_AGENTKIT_API_SECRET!,
+  apiKeyName: process.env.CDP_API_KEY_NAME!,
+  apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY!,
 });
 
 export default coinbaseService;
