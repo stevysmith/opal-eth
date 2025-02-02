@@ -11,7 +11,6 @@ import { db } from '@db';
 import { mpcWallets } from '@db/schema';
 import { eq } from 'drizzle-orm';
 
-// Initialize CDP Wallet Provider
 const initializeAgentKit = async () => {
   if (!process.env.CDP_API_KEY_NAME || !process.env.CDP_API_KEY_PRIVATE_KEY) {
     throw new Error('Missing required Coinbase CDP API credentials');
@@ -34,25 +33,24 @@ const initializeAgentKit = async () => {
       walletActionProvider(),
       erc20ActionProvider(),
       cdpApiActionProvider({
-        apiKeyName: process.env.CDP_API_KEY_NAME,
-        apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+        apiKeyName: config.apiKeyName,
+        apiKeyPrivateKey: config.apiKeyPrivateKey,
       }),
       cdpWalletActionProvider({
-        apiKeyName: process.env.CDP_API_KEY_NAME,
-        apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+        apiKeyName: config.apiKeyName,
+        apiKeyPrivateKey: config.apiKeyPrivateKey,
       }),
     ],
   });
 };
 
-export class USDCPaymentService {
+class USDCPaymentService {
   private wallet: any = null;
   private readonly agentId: number;
-  private readonly agentKit: AgentKit;
+  private agentKit: AgentKit | null = null;
 
   constructor(agentId: number) {
     this.agentId = agentId;
-    this.agentKit = null as any; // Will be initialized in initialize()
   }
 
   async initialize() {
@@ -66,13 +64,17 @@ export class USDCPaymentService {
       .where(eq(mpcWallets.agentId, this.agentId))
       .limit(1);
 
+    if (!this.agentKit) {
+      throw new Error('Failed to initialize AgentKit');
+    }
+
+    const walletProvider = await this.agentKit.getWalletProvider();
+
     if (existingWallet) {
       // Load existing wallet
-      const walletProvider = await this.agentKit.getWalletProvider();
       this.wallet = await walletProvider.getWallet(existingWallet.walletId);
     } else {
       // Create new wallet
-      const walletProvider = await this.agentKit.getWalletProvider();
       const newWallet = await walletProvider.createWallet();
       this.wallet = newWallet;
 
@@ -108,7 +110,6 @@ export class USDCPaymentService {
   }
 }
 
-// Export a function to create payment service instances
 export const createUSDCPaymentService = async (agentId: number) => {
   const service = new USDCPaymentService(agentId);
   await service.initialize();
