@@ -103,11 +103,10 @@ class BotManager {
           type: chat.type,
           title: 'title' in chat ? chat.title : undefined
         });
-        finalChannelId = chat.id.toString(); // Use numeric ID for better reliability
+        finalChannelId = chat.id.toString();
       } catch (firstError) {
         console.log(`[Bot ${agentId}] Failed with @ format, trying numeric ID...`);
         try {
-          // If @ format fails, try numeric ID
           const numericId = channelId.replace('@', '');
           const chat = await bot.telegram.getChat(numericId);
           console.log(`[Bot ${agentId}] Successfully accessed channel with numeric ID:`, {
@@ -117,7 +116,6 @@ class BotManager {
           });
           finalChannelId = numericId;
         } catch (secondError) {
-          console.error(`[Bot ${agentId}] All channel access attempts failed:`, { firstError, secondError });
           throw new Error(
             `Cannot access channel ${channelId}. Error: ${firstError.message}\n` +
             'Please ensure:\n' +
@@ -137,7 +135,6 @@ class BotManager {
         );
         console.log(`[Bot ${agentId}] Test message sent successfully:`, testMessage);
       } catch (error) {
-        console.error(`[Bot ${agentId}] Failed to send test message:`, error);
         throw new Error(
           `Failed to send message to channel. Error: ${error.message}\n` +
           'Please ensure the bot has posting permissions in the channel.'
