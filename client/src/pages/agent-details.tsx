@@ -65,13 +65,18 @@ export default function AgentDetailsPage() {
         throw new Error(data.error || "Failed to fetch agent");
       }
       const data = await response.json();
-      if (!data || !data.id) {
-        throw new Error("Agent not found");
+      if (!data) {
+        throw new Error("No data received");
       }
-      return data;
+      
+      // Log the received data for debugging
+      console.log("Received agent data:", data);
+      
+      return data as EnrichedAgent;
     },
     enabled: !!agentId,
-    retry: false
+    retry: false,
+    refetchOnWindowFocus: false
   });
 
   if (isLoading) {
