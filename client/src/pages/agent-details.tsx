@@ -56,6 +56,17 @@ interface EnrichedAgent {
 
 // Separate components for each agent type
 function PollDetails({ polls }: { polls: Poll[] }) {
+  if (!polls || polls.length === 0) {
+    return (
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Poll Results</CardTitle>
+          <CardDescription>No polls have been created yet</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
   return (
     <Card className="mt-6">
       <CardHeader>
@@ -118,6 +129,17 @@ function PollDetails({ polls }: { polls: Poll[] }) {
 }
 
 function GiveawayDetails({ giveaways }: { giveaways: Giveaway[] }) {
+  if (!giveaways || giveaways.length === 0) {
+    return (
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Giveaway Status</CardTitle>
+          <CardDescription>No giveaways have been created yet</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
   return (
     <Card className="mt-6">
       <CardHeader>
@@ -176,7 +198,7 @@ export default function AgentDetailsPage() {
       const response = await apiRequest("GET", `/api/agents/${agentId}`);
       const data = await response.json();
 
-      console.log("Received agent data:", data);
+      console.log("Agent details response:", data);
 
       if (!response.ok) {
         throw new Error(data.error || "Failed to fetch agent");
@@ -186,6 +208,7 @@ export default function AgentDetailsPage() {
     },
     enabled: !!agentId,
     retry: false,
+    staleTime: 0, // Always fetch fresh data
   });
 
   if (isLoading) {
@@ -249,12 +272,12 @@ export default function AgentDetailsPage() {
           </CardContent>
         </Card>
 
-        {agent.template === "poll" && agent.polls && (
-          <PollDetails polls={agent.polls} />
+        {agent.template === "poll" && (
+          <PollDetails polls={agent.polls || []} />
         )}
 
-        {agent.template === "giveaway" && agent.giveaways && (
-          <GiveawayDetails giveaways={agent.giveaways} />
+        {agent.template === "giveaway" && (
+          <GiveawayDetails giveaways={agent.giveaways || []} />
         )}
 
         {agent.template === "qa" && (

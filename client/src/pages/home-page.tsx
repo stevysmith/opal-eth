@@ -21,12 +21,15 @@ import { formatDistanceToNow } from "date-fns";
 export default function HomePage() {
   const { user, logoutMutation } = useAuth();
   const { toast } = useToast();
-  const { data: agents } = useQuery<SelectAgent[]>({ queryKey: ["/api/agents"] });
+  const { data: agents, isLoading } = useQuery<SelectAgent[]>({ 
+    queryKey: ["/api/agents"],
+    retry: false
+  });
   const [pendingAgents, setPendingAgents] = useState<Set<number>>(new Set());
   const [, navigate] = useLocation();
 
   const handleViewDetails = (agentId: number) => {
-    console.log(`Navigating to agent details: ${agentId}`);
+    queryClient.removeQueries({ queryKey: ["/api/agents", agentId] });
     navigate(`/agents/${agentId}`);
   };
 
@@ -59,6 +62,14 @@ export default function HomePage() {
       });
     },
   });
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen p-8">
@@ -107,28 +118,8 @@ export default function HomePage() {
                   </div>
                   <div className="text-sm">
                     <span className="font-medium">Channel:</span>{" "}
-                    {(agent.platformConfig as { channelId: string })?.channelId}
+                    {agent.platformConfig.channelId}
                   </div>
-                  {agent.activePolls && agent.activePolls.length > 0 && (
-                    <div className="mt-4">
-                      <h4 className="text-sm font-medium mb-2">Active Polls</h4>
-                      {agent.activePolls.slice(0, 2).map((poll) => (
-                        <div key={poll.id} className="text-sm text-muted-foreground">
-                          • {poll.question} (ends {formatDistanceToNow(new Date(poll.endTime), { addSuffix: true })})
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {agent.activeGiveaways && agent.activeGiveaways.length > 0 && (
-                    <div className="mt-4">
-                      <h4 className="text-sm font-medium mb-2">Active Giveaways</h4>
-                      {agent.activeGiveaways.slice(0, 2).map((giveaway) => (
-                        <div key={giveaway.id} className="text-sm text-muted-foreground">
-                          • {giveaway.prize} (ends {formatDistanceToNow(new Date(giveaway.endTime), { addSuffix: true })})
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </CardContent>
               <CardFooter>
