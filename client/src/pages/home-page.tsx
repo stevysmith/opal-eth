@@ -25,9 +25,26 @@ export default function HomePage() {
   const [pendingAgents, setPendingAgents] = useState<Set<number>>(new Set());
   const [, navigate] = useLocation();
 
-  const handleViewDetails = (agentId: number) => {
+  const handleViewDetails = async (agentId: number) => {
     console.log(`Navigating to agent details: ${agentId}`);
-    navigate(`/agents/${agentId}`);
+    try {
+      const response = await apiRequest("GET", `/api/agents/${agentId}`);
+      if (response.ok) {
+        navigate(`/agents/${agentId}`);
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to find agent details",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to load agent details",
+        variant: "destructive",
+      });
+    }
   };
 
   const toggleMutation = useMutation({
