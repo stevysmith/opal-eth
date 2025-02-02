@@ -2,7 +2,7 @@ import { Telegraf, Context } from "telegraf";
 import { Update } from "telegraf/typings/core/types/typegram";
 import { db } from "@db";
 import { agents, polls, votes, giveaways, giveawayEntries } from "@db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import schedule from "node-schedule";
 
 class BotManager {
@@ -48,65 +48,56 @@ class BotManager {
         throw new Error("Missing Telegram bot token");
       }
 
-      // Initialize bot if not exists
-      if (!this.bots.has(agentId)) {
-        console.log(`[Bot ${agentId}] Initializing new bot for channel ${config.channelId}...`);
-        const bot = new Telegraf(config.token);
+      // Stop existing bot if any
+      await this.stopAgent(agentId);
+      console.log(`[Bot ${agentId}] Creating new bot instance...`);
 
-        // Set up command handlers based on template
-        switch (agent.template) {
-          case "poll":
-            this.setupPollCommands(bot, agentId);
-            break;
-          case "giveaway":
-            this.setupGiveawayCommands(bot, agentId);
-            break;
-          case "qa":
-            this.setupQACommands(bot, agentId);
-            break;
-        }
+      // Initialize new bot
+      const bot = new Telegraf(config.token);
 
-        // Setup bot and start polling
-        try {
-          await this.setupWebhook(bot, agentId);
-          console.log(`[Bot ${agentId}] Bot setup completed`);
-        } catch (error) {
-          console.error(`[Bot ${agentId}] Failed to setup bot:`, error);
-          throw error;
-        }
+      // Add global error handler
+      bot.catch((error) => {
+        console.error(`[Bot ${agentId}] Unhandled bot error:`, error);
+      });
 
-        // Test channel connection with retries
-        let retryCount = 0;
-        const maxRetries = 3;
-        let messageSuccess = false;
-
-        while (retryCount < maxRetries && !messageSuccess) {
-          try {
-            await bot.telegram.sendMessage(
-              config.channelId,
-              `🤖 Bot initialized successfully!\n\nTemplate: ${agent.template}\nName: ${agent.name}\n\nUse the following commands:\n${this.getCommandList(agent.template)}`
-            );
-            console.log(`[Bot ${agentId}] Successfully connected to channel ${config.channelId}`);
-            messageSuccess = true;
-
-            this.bots.set(agentId, bot);
-            return true;
-          } catch (error) {
-            retryCount++;
-            if (retryCount === maxRetries) {
-              console.error(`[Bot ${agentId}] Failed to send test message to channel ${config.channelId}:`, error);
-              throw new Error(
-                `Bot couldn't send messages to the channel after ${maxRetries} attempts. Make sure the bot is an admin in the channel and has permission to post messages.`
-              );
-            }
-            await new Promise(resolve => setTimeout(resolve, 2000));
-          }
-        }
+      // Set up command handlers based on template
+      switch (agent.template) {
+        case "poll":
+          this.setupPollCommands(bot, agentId);
+          break;
+        case "giveaway":
+          this.setupGiveawayCommands(bot, agentId);
+          break;
+        case "qa":
+          this.setupQACommands(bot, agentId);
+          break;
       }
 
-      return this.bots.has(agentId);
+      // Enable debug mode
+      bot.use(Telegraf.log());
+
+      // Start bot in polling mode
+      console.log(`[Bot ${agentId}] Starting bot in polling mode...`);
+      await bot.launch();
+      console.log(`[Bot ${agentId}] Bot launched successfully`);
+
+      // Test channel connection
+      try {
+        await bot.telegram.sendMessage(
+          config.channelId,
+          `🤖 Bot restarted and ready!\n\nTemplate: ${agent.template}\nName: ${agent.name}\n\nUse the following commands:\n${this.getCommandList(agent.template)}`
+        );
+        console.log(`[Bot ${agentId}] Successfully sent test message to channel ${config.channelId}`);
+      } catch (error) {
+        console.error(`[Bot ${agentId}] Failed to send test message:`, error);
+        throw new Error("Failed to send test message to channel. Make sure the bot is an admin in the channel.");
+      }
+
+      // Store bot instance
+      this.bots.set(agentId, bot);
+      return true;
     } catch (error) {
-      console.error(`[Bot ${agentId}] Error in initializeAgent:`, error);
+      console.error(`[Bot ${agentId}] Failed to initialize:`, error);
       await this.stopAgent(agentId);
       throw error;
     }
@@ -117,7 +108,7 @@ class BotManager {
       case "poll":
         return "📊 /poll \"Question\" [\"Option1\",\"Option2\"]\n🗳️ /vote <poll_id> <option_number>";
       case "giveaway":
-        return "🎉 /giveaway \"Prize\" <duration_in_hours>\n🎫 /enter <giveaway_id>";
+        return "🎉 /giveaway \"Prize\" in <duration_in_mins|hours|h>\n🎫 /enter <giveaway_id>";
       case "qa":
         return "❓ Just send your questions in the chat!";
       default:
@@ -225,125 +216,104 @@ class BotManager {
   }
 
   private setupGiveawayCommands(bot: Telegraf<Context<Update>>, agentId: number) {
+    console.log(`[Bot ${agentId}] Setting up giveaway commands`);
+
     bot.command("giveaway", async (ctx) => {
       try {
-        const message = ctx.message.text.substring(9); // Remove '/giveaway '
-        console.log(`[Bot ${agentId}] Received giveaway command:`, message);
+        console.log(`[Bot ${agentId}] Received giveaway command:`, ctx.message.text);
+        const message = ctx.message.text.substring(9).trim(); // Remove '/giveaway '
 
-        const prizeMatch = message.match(/"([^"]+)"/);
-        const durationMatch = message.match(/in (\d+)\s*(mins?|hours?|h)/i);
+        // Updated regex to better handle the command format
+        const match = message.match(/^"([^"]+)"\s+in\s+(\d+)\s*(mins?|hours?|h)$/i);
 
-        if (!prizeMatch || !durationMatch) {
-          console.log(`[Bot ${agentId}] Invalid format received:`, { prizeMatch, durationMatch });
-          return ctx.reply('Invalid format. Use: /giveaway "Prize" <duration_in_hours>\nExample: /giveaway "Special Prize" in 2 hours');
+        if (!match) {
+          console.log(`[Bot ${agentId}] Invalid format:`, message);
+          return ctx.reply(
+            'Invalid format. Use: /giveaway "Prize Name" in <number> <hours/mins>\n' +
+            'Examples:\n' +
+            '• /giveaway "Cool Prize" in 1 hour\n' +
+            '• /giveaway "Quick Prize" in 30 mins'
+          );
         }
 
-        const prize = prizeMatch[1];
-        const amount = parseInt(durationMatch[1]);
-        const unit = durationMatch[2].toLowerCase();
-        console.log(`[Bot ${agentId}] Parsed giveaway details:`, { prize, amount, unit });
+        const [, prize, amount, unit] = match;
+        console.log(`[Bot ${agentId}] Parsed giveaway:`, { prize, amount, unit });
 
         // Convert duration to hours
-        const durationHours = unit.startsWith('min') ? amount / 60 : amount;
-
+        const durationHours = unit.startsWith('min') ? parseInt(amount) / 60 : parseInt(amount);
         const endTime = new Date();
         endTime.setHours(endTime.getHours() + durationHours);
 
-        console.log(`[Bot ${agentId}] Creating giveaway in database with values:`, {
+        console.log(`[Bot ${agentId}] Creating giveaway with duration:`, durationHours, 'hours');
+
+        // Create the giveaway
+        const [giveaway] = await db.insert(giveaways).values({
           agentId,
           prize,
-          startTime: new Date().toISOString(),
-          endTime: endTime.toISOString(),
-        });
+          startTime: new Date(),
+          endTime,
+        }).returning();
 
-        try {
-          // First verify the agent exists
-          const [agentCheck] = await db
-            .select()
-            .from(agents)
-            .where(eq(agents.id, agentId))
-            .limit(1);
+        console.log(`[Bot ${agentId}] Created giveaway:`, giveaway);
 
-          if (!agentCheck) {
-            console.error(`[Bot ${agentId}] Agent not found in database`);
-            throw new Error('Agent not found');
-          }
+        // Send confirmation message
+        const response = await ctx.reply(
+          `🎉 New Giveaway!\n\n` +
+          `Prize: ${prize}\n` +
+          `Duration: ${durationHours < 1 ? `${Math.round(durationHours * 60)} minutes` : `${durationHours} hours`}\n\n` +
+          `Type /enter ${giveaway.id} to participate!`
+        );
 
-          console.log(`[Bot ${agentId}] Agent verified:`, agentCheck);
+        console.log(`[Bot ${agentId}] Sent giveaway announcement:`, response);
 
-          // Create the giveaway
-          const [giveaway] = await db.insert(giveaways).values({
-            agentId,
-            prize,
-            startTime: new Date(),
-            endTime,
-          }).returning();
+        // Schedule end of giveaway
+        this.jobs.set(giveaway.id, schedule.scheduleJob(endTime, async () => {
+          try {
+            const entries = await db
+              .select()
+              .from(giveawayEntries)
+              .where(eq(giveawayEntries.giveawayId, giveaway.id));
 
-          console.log(`[Bot ${agentId}] Successfully created giveaway:`, giveaway);
-
-          // Verify giveaway was created
-          const [verifyGiveaway] = await db
-            .select()
-            .from(giveaways)
-            .where(eq(giveaways.id, giveaway.id))
-            .limit(1);
-
-          if (!verifyGiveaway) {
-            console.error(`[Bot ${agentId}] Failed to verify giveaway creation`);
-            throw new Error('Failed to verify giveaway creation');
-          }
-
-          console.log(`[Bot ${agentId}] Verified giveaway in database:`, verifyGiveaway);
-
-          // Send confirmation message
-          await ctx.reply(
-            `🎉 New Giveaway!\n\nPrize: ${giveaway.prize}\nEnds in: ${durationHours < 1 ? `${Math.round(durationHours * 60)} minutes` : `${durationHours} hours`}\n\nEnter using: /enter ${giveaway.id}`
-          );
-
-          // Schedule giveaway end
-          this.jobs.set(giveaway.id, schedule.scheduleJob(endTime, async () => {
-            try {
-              const entries = await db
-                .select()
-                .from(giveawayEntries)
-                .where(eq(giveawayEntries.giveawayId, giveaway.id));
-
-              if (entries.length === 0) {
-                await ctx.reply(`Giveaway for ${giveaway.prize} ended with no participants!`);
-                return;
-              }
-
-              // Pick random winner
-              const winner = entries[Math.floor(Math.random() * entries.length)];
-
-              await db
-                .update(giveaways)
-                .set({ winnerId: winner.userId })
-                .where(eq(giveaways.id, giveaway.id));
-
-              await ctx.reply(
-                `🎉 Giveaway Ended!\n\nPrize: ${giveaway.prize}\nWinner: @${winner.userId}\n\nCongratulations!`
-              );
-            } catch (endError) {
-              console.error(`[Bot ${agentId}] Error ending giveaway:`, endError);
-              await ctx.reply('An error occurred while ending the giveaway.');
+            if (entries.length === 0) {
+              await ctx.reply(`Giveaway for "${prize}" ended with no participants!`);
+              return;
             }
-          }));
 
-        } catch (dbError) {
-          console.error(`[Bot ${agentId}] Database error creating giveaway:`, dbError);
-          await ctx.reply('Failed to create giveaway due to a database error. Please try again.');
-          throw dbError;
-        }
+            // Pick random winner
+            const winner = entries[Math.floor(Math.random() * entries.length)];
+
+            await db
+              .update(giveaways)
+              .set({ winnerId: winner.userId })
+              .where(eq(giveaways.id, giveaway.id));
+
+            await ctx.reply(
+              `🎉 Giveaway Ended!\n\n` +
+              `Prize: ${prize}\n` +
+              `Winner: @${winner.userId}\n\n` +
+              `Congratulations!`
+            );
+          } catch (error) {
+            console.error(`[Bot ${agentId}] Error ending giveaway:`, error);
+            await ctx.reply('An error occurred while ending the giveaway.');
+          }
+        }));
+
       } catch (error) {
         console.error(`[Bot ${agentId}] Error handling giveaway command:`, error);
         await ctx.reply("Failed to create giveaway. Please try again.");
       }
     });
 
+    // Add command for entering giveaways
     bot.command("enter", async (ctx) => {
       try {
+        console.log(`[Bot ${agentId}] Received enter command:`, ctx.message.text);
         const giveawayId = parseInt(ctx.message.text.split(" ")[1]);
+
+        if (isNaN(giveawayId)) {
+          return ctx.reply("Please provide a valid giveaway ID. Example: /enter 123");
+        }
 
         const [giveaway] = await db
           .select()
@@ -359,16 +329,39 @@ class BotManager {
           return ctx.reply("This giveaway has ended");
         }
 
+        // Check if user already entered
+        const [existingEntry] = await db
+          .select()
+          .from(giveawayEntries)
+          .where(and(
+            eq(giveawayEntries.giveawayId, giveaway.id),
+            eq(giveawayEntries.userId, ctx.from.id.toString())
+          ))
+          .limit(1);
+
+        if (existingEntry) {
+          return ctx.reply("You've already entered this giveaway!");
+        }
+
         await db.insert(giveawayEntries).values({
           giveawayId: giveaway.id,
           userId: ctx.from.id.toString(),
         });
 
-        ctx.reply("You've been entered into the giveaway!");
+        ctx.reply("🎫 You've been entered into the giveaway! Good luck!");
       } catch (error) {
-        console.error("Error entering giveaway:", error);
+        console.error(`[Bot ${agentId}] Error handling enter command:`, error);
         ctx.reply("Failed to enter giveaway. Please try again.");
       }
+    });
+
+    // Debug logging for all messages
+    bot.on("message", (ctx) => {
+      console.log(`[Bot ${agentId}] Received message:`, {
+        from: ctx.from?.id,
+        text: ctx.message?.text,
+        type: ctx.updateType
+      });
     });
   }
 
