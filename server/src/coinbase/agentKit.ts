@@ -34,11 +34,27 @@ class CoinbaseService {
 
   async createMpcWallet(agentId: number): Promise<string> {
     try {
-      const wallet = await this.agentKit.getActions().find(action => action.type === 'wallet')?.createWallet();
-      if (!wallet) {
-        throw new Error('Failed to create wallet');
+      console.log('Creating MPC wallet for agent:', agentId);
+      
+      const actions = this.agentKit.getActions();
+      console.log('Available actions:', actions.map(a => ({ type: a.type, methods: Object.keys(a) })));
+      
+      const walletAction = actions.find(action => action.type === 'wallet');
+      console.log('Found wallet action:', walletAction ? 'yes' : 'no', walletAction);
+      
+      if (!walletAction) {
+        throw new Error('Wallet action provider not found');
       }
 
+      console.log('Attempting to create wallet...');
+      const wallet = await walletAction.createWallet();
+      console.log('Wallet creation response:', wallet);
+
+      if (!wallet) {
+        throw new Error('Wallet creation returned null/undefined');
+      }
+
+      console.log('Inserting wallet record into database...');
       await db.insert(mpcWallets).values({
         agentId,
         walletId: wallet.id,
@@ -47,8 +63,15 @@ class CoinbaseService {
 
       return wallet.id;
     } catch (error) {
-      console.error('Error creating MPC wallet:', error);
-      throw new Error('Failed to create MPC wallet');
+      console.error('Error creating MPC wallet:', {
+        error,
+        stack: error instanceof Error ? error.stack : undefined,
+        agentKitState: {
+          initialized: !!this.agentKit,
+          hasActions: this.agentKit?.getActions()?.length > 0
+        }
+      });
+      throw error; // Throw original error to preserve stack trace
     }
   }
 
