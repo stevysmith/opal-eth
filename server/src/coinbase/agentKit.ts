@@ -1,3 +1,4 @@
+
 import { 
   AgentKit,
   CdpWalletProvider,
@@ -10,48 +11,19 @@ import { db } from '@db';
 import { mpcWallets } from '@db/schema';
 import { eq } from 'drizzle-orm';
 
-const initializeAgentKit = async () => {
-  if (!process.env.CDP_API_KEY_NAME || !process.env.CDP_API_KEY_PRIVATE_KEY) {
-    throw new Error('Missing required Coinbase CDP API credentials');
-  }
-
-  const config = {
-    apiKeyName: process.env.CDP_API_KEY_NAME,
-    apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-    networkId: process.env.NETWORK_ID || "base-sepolia",
-  };
-
-  const walletProvider = await CdpWalletProvider.configureWithWallet({
-    ...config,
-    cdpWalletData: undefined
-  });
-
-  return await AgentKit.from({
-    walletProvider,
-    actionProviders: [
-      walletActionProvider(),
-      erc20ActionProvider(),
-      cdpApiActionProvider({
-        apiKeyName: config.apiKeyName,
-        apiKeyPrivateKey: config.apiKeyPrivateKey,
-      }),
-      cdpWalletActionProvider({
-        apiKeyName: config.apiKeyName,
-        apiKeyPrivateKey: config.apiKeyPrivateKey,
-      }),
-    ],
-  });
-};
-
 class USDCPaymentService {
   private wallet: any = null;
   private readonly agentId: number;
   private agentKit: AgentKit | null = null;
-  private config: any; // Added config property
+  private config: {
+    apiKeyName: string;
+    apiKeyPrivateKey: string;
+    networkId: string;
+  };
 
   constructor(agentId: number) {
     this.agentId = agentId;
-    this.config = { // Initialize config
+    this.config = {
       apiKeyName: process.env.CDP_API_KEY_NAME!,
       apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY!.replace(/\\n/g, "\n"),
       networkId: process.env.NETWORK_ID || "base-sepolia",
@@ -59,8 +31,28 @@ class USDCPaymentService {
   }
 
   async initialize() {
-    // Initialize AgentKit
-    this.agentKit = await initializeAgentKit();
+    // Initialize CDP Wallet Provider
+    const walletProvider = await CdpWalletProvider.configureWithWallet({
+      ...this.config,
+      cdpWalletData: undefined
+    });
+
+    // Initialize AgentKit with all required providers
+    this.agentKit = await AgentKit.from({
+      walletProvider,
+      actionProviders: [
+        walletActionProvider(),
+        erc20ActionProvider(),
+        cdpApiActionProvider({
+          apiKeyName: this.config.apiKeyName,
+          apiKeyPrivateKey: this.config.apiKeyPrivateKey,
+        }),
+        cdpWalletActionProvider({
+          apiKeyName: this.config.apiKeyName,
+          apiKeyPrivateKey: this.config.apiKeyPrivateKey,
+        }),
+      ],
+    });
 
     // Check if wallet exists in database
     const [existingWallet] = await db
@@ -72,8 +64,6 @@ class USDCPaymentService {
     if (!this.agentKit) {
       throw new Error('Failed to initialize AgentKit');
     }
-
-    const walletProvider = await this.agentKit.getWalletProvider();
 
     if (existingWallet) {
       // Load existing wallet
