@@ -11,10 +11,10 @@ export default function WizardPage() {
     <WizardProvider>
       <WizardLayout>
         <Switch>
-          <Route path="/wizard" component={TemplateStep} />
-          <Route path="/wizard/persona" component={PersonaStep} />
-          <Route path="/wizard/platform" component={PlatformStep} />
-          <Route path="/wizard/review" component={ReviewStep} />
+          <Route path="/" component={TemplateStep} />
+          <Route path="/persona" component={PersonaStep} />
+          <Route path="/platform" component={PlatformStep} />
+          <Route path="/review" component={ReviewStep} />
         </Switch>
       </WizardLayout>
     </WizardProvider>
