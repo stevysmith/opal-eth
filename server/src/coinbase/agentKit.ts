@@ -1,7 +1,7 @@
 
 import { AgentKit } from '@coinbase/agentkit';
-import { WalletProvider, CdpWalletProvider } from '@coinbase/agentkit/wallet-providers';
-import { ActionProvider, walletActionProvider, erc20ActionProvider } from '@coinbase/agentkit/action-providers';
+import { WalletProvider, CdpWalletProvider } from '@coinbase/agentkit';
+import { walletActionProvider, erc20ActionProvider } from '@coinbase/agentkit';
 import { db } from "@db";
 import { mpcWallets } from "@db/schema";
 import { eq } from "drizzle-orm";
