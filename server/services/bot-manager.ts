@@ -30,11 +30,44 @@ class BotManager {
     }
   }
 
+  private async initializeBotInstance(agentId: number, token: string, channelId: string) {
+    console.log(`[Bot ${agentId}] Creating bot instance with token length:`, token.length);
+
+    const bot = new Telegraf(token);
+
+    // Add middleware for detailed logging of all updates
+    bot.use(async (ctx, next) => {
+      console.log(`[Bot ${agentId}] Received update:`, {
+        type: ctx.updateType,
+        message: ctx.message ? {
+          text: ctx.message.text,
+          from: ctx.message.from,
+          chat: ctx.message.chat
+        } : undefined,
+        from: ctx.from,
+        chat: ctx.chat
+      });
+      await next();
+    });
+
+    // Test connection before proceeding
+    try {
+      console.log(`[Bot ${agentId}] Testing bot connection...`);
+      const me = await bot.telegram.getMe();
+      console.log(`[Bot ${agentId}] Bot info:`, me);
+    } catch (error) {
+      console.error(`[Bot ${agentId}] Failed to get bot info:`, error);
+      throw new Error(`Failed to connect to Telegram: ${error.message}`);
+    }
+
+    return bot;
+  }
+
   async initializeAgent(agentId: number) {
     try {
       // Stop any existing bot first
       await this.stopAgent(agentId);
-      console.log(`[Bot ${agentId}] Creating new bot instance...`);
+      console.log(`[Bot ${agentId}] Initializing new agent...`);
 
       const [agent] = await db
         .select()
@@ -51,30 +84,22 @@ class BotManager {
         throw new Error("Missing Telegram bot token");
       }
 
-      // Initialize new bot
-      const bot = new Telegraf(config.token);
+      // Initialize bot with more detailed error handling
+      const bot = await this.initializeBotInstance(agentId, config.token, config.channelId);
 
-      // Add middleware for logging all updates
-      bot.use(async (ctx, next) => {
-        console.log(`[Bot ${agentId}] Received update:`, {
-          type: ctx.updateType,
-          message: ctx.message,
-          from: ctx.from,
-        });
-        await next();
-      });
+      // Set up commands
+      console.log(`[Bot ${agentId}] Setting up command handlers...`);
 
-      // Set up basic commands first
       bot.command("start", (ctx) => {
         console.log(`[Bot ${agentId}] Start command received from:`, ctx.from);
         ctx.reply(`👋 Welcome! I'm a ${agent.template} bot.\n\nAvailable commands:\n${this.getCommandList(agent.template)}`);
       });
-    
+
       bot.command("help", (ctx) => {
         ctx.reply(`Available commands:\n${this.getCommandList(agent.template)}`);
       });
 
-      // Set up command handlers based on template
+      // Set up template-specific commands
       switch (agent.template) {
         case "poll":
           this.setupPollCommands(bot, agentId);
@@ -93,17 +118,19 @@ class BotManager {
         ctx.reply("Sorry, something went wrong. Please try again later.");
       });
 
-      // Start bot in polling mode with retries
+      // Start bot with retries and detailed error logging
       console.log(`[Bot ${agentId}] Starting bot in polling mode...`);
       try {
         for (let attempt = 1; attempt <= 3; attempt++) {
           try {
+            console.log(`[Bot ${agentId}] Launch attempt ${attempt}`);
             await bot.launch();
             console.log(`[Bot ${agentId}] Bot launched successfully`);
             break;
           } catch (error) {
+            console.error(`[Bot ${agentId}] Launch attempt ${attempt} failed:`, error);
             if (error.message.includes('409: Conflict')) {
-              console.log(`[Bot ${agentId}] Launch attempt ${attempt} failed with conflict, retrying after delay...`);
+              console.log(`[Bot ${agentId}] Conflict detected, retrying after delay...`);
               await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
               continue;
             }
@@ -111,20 +138,21 @@ class BotManager {
           }
         }
       } catch (error) {
-        console.error(`[Bot ${agentId}] Failed to launch bot:`, error);
+        console.error(`[Bot ${agentId}] All launch attempts failed:`, error);
         throw error;
       }
 
-      // Test channel connection
+      // Test channel connection with detailed error handling
       try {
-        await bot.telegram.sendMessage(
+        console.log(`[Bot ${agentId}] Testing channel connection (${config.channelId})...`);
+        const message = await bot.telegram.sendMessage(
           config.channelId,
           `🤖 Bot restarted and ready!\n\nTemplate: ${agent.template}\nName: ${agent.name}\n\nUse the following commands:\n${this.getCommandList(agent.template)}`
         );
-        console.log(`[Bot ${agentId}] Successfully sent test message to channel ${config.channelId}`);
+        console.log(`[Bot ${agentId}] Test message sent successfully:`, message);
       } catch (error) {
         console.error(`[Bot ${agentId}] Failed to send test message:`, error);
-        throw new Error("Failed to send test message to channel. Make sure the bot is an admin in the channel.");
+        throw new Error(`Failed to send message to channel ${config.channelId}. Make sure the bot is an admin in the channel. Error: ${error.message}`);
       }
 
       // Store bot instance
