@@ -12,7 +12,6 @@ import { Loader2, MessageSquare, Award, BarChart3 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { apiRequest } from "@/lib/queryClient";
 
-// Define comprehensive types for each feature
 interface Poll {
   id: number;
   question: string;
@@ -54,7 +53,6 @@ interface EnrichedAgent {
   giveaways?: Giveaway[];
 }
 
-// Separate components for each agent type
 function PollDetails({ polls }: { polls: Poll[] }) {
   if (!polls || polls.length === 0) {
     return (
@@ -191,25 +189,28 @@ export default function AgentDetailsPage() {
   const params = useParams<{ id: string }>();
   const agentId = params.id ? parseInt(params.id) : undefined;
 
+  console.log("AgentDetailsPage: Initialized with agentId:", agentId);
+
   const { data: agent, isLoading, error } = useQuery<EnrichedAgent>({
-    queryKey: ["/api/agents", agentId],
+    queryKey: [`/api/agents/${agentId}`],
+    enabled: !!agentId,
+    retry: 1,
+    staleTime: 0,
     queryFn: async () => {
       if (!agentId) throw new Error("No agent ID provided");
+
+      console.log("AgentDetailsPage: Fetching data for agent:", agentId);
       const response = await apiRequest("GET", `/api/agents/${agentId}`);
+      console.log("AgentDetailsPage: Received response:", response.status);
+
       const data = await response.json();
+      console.log("AgentDetailsPage: Parsed data:", data);
 
-      console.log("Agent details response:", data);
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to fetch agent");
-      }
-
-      return data as EnrichedAgent;
+      return data;
     },
-    enabled: !!agentId,
-    retry: false,
-    staleTime: 0,
   });
+
+  console.log("AgentDetailsPage: Current state:", { isLoading, error, agent });
 
   if (isLoading) {
     return (

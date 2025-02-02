@@ -29,16 +29,21 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
+    console.log("Executing query with key:", queryKey);
     const res = await fetch(queryKey[0] as string, {
       credentials: "include",
     });
+
+    console.log("Query response status:", res.status);
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
       return null;
     }
 
     await throwIfResNotOk(res);
-    return await res.json();
+    const data = await res.json();
+    console.log("Query response data:", data);
+    return data;
   };
 
 export const queryClient = new QueryClient({
@@ -47,8 +52,9 @@ export const queryClient = new QueryClient({
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
       refetchOnWindowFocus: false,
-      staleTime: Infinity,
-      retry: false,
+      staleTime: 30000, // 30 seconds instead of Infinity
+      retry: 1,
+      retryDelay: 1000,
     },
     mutations: {
       retry: false,
