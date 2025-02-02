@@ -61,25 +61,17 @@ export default function AgentDetailsPage() {
     queryFn: async () => {
       if (!agentId) throw new Error("No agent ID provided");
       const response = await apiRequest("GET", `/api/agents/${agentId}`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData?.error || "Failed to fetch agent");
+      }
+      
       const data = await response.json();
+      if (!data || typeof data !== 'object') {
+        throw new Error("Invalid response format");
+      }
 
-      console.log("API Response status:", response.status);
-      console.log("API Response headers:", Object.fromEntries(response.headers.entries()));
       console.log("Received agent data:", data);
-
-      if (!response.ok || !data) {
-        console.error("Error details:", { 
-          status: response.status,
-          statusText: response.statusText,
-          data
-        });
-        throw new Error(data?.error || "Failed to fetch agent");
-      }
-
-      if (!data) {
-        throw new Error("No data received");
-      }
-
       return data as EnrichedAgent;
     },
     enabled: !!agentId,
