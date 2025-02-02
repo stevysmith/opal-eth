@@ -20,6 +20,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { useWizard } from "@/hooks/use-wizard";
 
 const platformSchema = z.object({
   platform: z.enum(["telegram", "discord"]),
@@ -29,16 +30,25 @@ const platformSchema = z.object({
 
 export default function PlatformStep() {
   const [, navigate] = useLocation();
+  const { formData, setFormData } = useWizard();
+
   const form = useForm({
     resolver: zodResolver(platformSchema),
     defaultValues: {
-      platform: "telegram",
-      token: "",
-      channelId: "",
+      platform: (formData.platform as "telegram" | "discord") || "telegram",
+      token: formData.platformConfig?.token || "",
+      channelId: formData.platformConfig?.channelId || "",
     },
   });
 
-  const onSubmit = form.handleSubmit(() => {
+  const onSubmit = form.handleSubmit((data) => {
+    setFormData({
+      platform: data.platform,
+      platformConfig: {
+        token: data.token,
+        channelId: data.channelId,
+      },
+    });
     navigate("/wizard/review");
   });
 

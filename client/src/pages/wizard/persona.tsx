@@ -14,6 +14,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { useWizard } from "@/hooks/use-wizard";
 
 const personaSchema = z.object({
   name: z.string().min(3).max(50),
@@ -23,16 +24,25 @@ const personaSchema = z.object({
 
 export default function PersonaStep() {
   const [, navigate] = useLocation();
+  const { formData, setFormData } = useWizard();
+
   const form = useForm({
     resolver: zodResolver(personaSchema),
     defaultValues: {
-      name: "",
-      description: "",
-      tone: "",
+      name: formData.name || "",
+      description: formData.description || "",
+      tone: formData.tone || "",
     },
   });
 
-  const onSubmit = form.handleSubmit(() => {
+  const onSubmit = form.handleSubmit((data) => {
+    setFormData({ 
+      name: data.name,
+      persona: {
+        description: data.description,
+        tone: data.tone
+      }
+    });
     navigate("/wizard/platform");
   });
 

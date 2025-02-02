@@ -5,14 +5,16 @@ import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
+import { useWizard } from "@/hooks/use-wizard";
 
 export default function ReviewStep() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { formData, clearForm } = useWizard();
 
   const createAgentMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const res = await apiRequest("POST", "/api/agents", data);
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/agents", formData);
       return res.json();
     },
     onSuccess: () => {
@@ -21,6 +23,7 @@ export default function ReviewStep() {
         title: "Success!",
         description: "Your bot has been created",
       });
+      clearForm();
       navigate("/");
     },
     onError: (error: Error) => {
@@ -47,8 +50,30 @@ export default function ReviewStep() {
             <CardTitle>Bot Configuration</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Display configuration summary here */}
-            <p>Configuration summary will be shown here</p>
+            <div>
+              <h3 className="font-semibold mb-2">Template</h3>
+              <p className="text-sm text-muted-foreground">{formData.template}</p>
+            </div>
+            <div>
+              <h3 className="font-semibold mb-2">Name</h3>
+              <p className="text-sm text-muted-foreground">{formData.name}</p>
+            </div>
+            <div>
+              <h3 className="font-semibold mb-2">Persona</h3>
+              <p className="text-sm text-muted-foreground">
+                Description: {formData.persona?.description}
+                <br />
+                Tone: {formData.persona?.tone}
+              </p>
+            </div>
+            <div>
+              <h3 className="font-semibold mb-2">Platform</h3>
+              <p className="text-sm text-muted-foreground">
+                Platform: {formData.platform}
+                <br />
+                Channel ID: {formData.platformConfig?.channelId}
+              </p>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -61,7 +86,7 @@ export default function ReviewStep() {
           Back
         </Button>
         <Button
-          onClick={() => createAgentMutation.mutate({})}
+          onClick={() => createAgentMutation.mutate()}
           disabled={createAgentMutation.isPending}
         >
           {createAgentMutation.isPending && (
