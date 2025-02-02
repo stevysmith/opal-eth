@@ -29,6 +29,7 @@ interface Giveaway {
   endTime: string;
   isActive: boolean;
   totalEntries: number;
+  winnerId?: string;
 }
 
 interface EnrichedAgent {
@@ -46,6 +47,7 @@ interface EnrichedAgent {
     channelId: string;
   };
   active: boolean;
+  createdAt: string;
   polls?: Poll[];
   giveaways?: Giveaway[];
 }
@@ -116,6 +118,29 @@ export default function AgentDetailsPage() {
             {agent.active ? "Active" : "Inactive"}
           </Badge>
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Configuration</CardTitle>
+            <CardDescription>Agent settings and details</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <h3 className="font-semibold mb-2">Platform</h3>
+              <p className="text-sm text-muted-foreground">
+                {agent.platform} - Channel: {agent.platformConfig.channelId}
+              </p>
+            </div>
+            <div>
+              <h3 className="font-semibold mb-2">Persona</h3>
+              <p className="text-sm text-muted-foreground">
+                {agent.persona.description}
+                <br />
+                Tone: {agent.persona.tone}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
 
         {agent.template === "poll" && agent.polls && agent.polls.length > 0 && (
           <Card>
