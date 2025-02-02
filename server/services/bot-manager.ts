@@ -121,7 +121,7 @@ class BotManager {
           throw new Error(
             `Cannot access channel ${channelId}. Error: ${firstError.message}\n` +
             'Please ensure:\n' +
-            '1. The channel ID/username is correct\n' +
+            '1. The channel ID is correct\n' +
             '2. The bot is added to the channel\n' +
             '3. The bot is an administrator in the channel'
           );
