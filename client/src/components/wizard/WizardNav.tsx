@@ -1,23 +1,25 @@
 import { Link, useLocation } from "wouter";
 
 const steps = [
-  { path: "/wizard", label: "Template" },
-  { path: "/wizard/persona", label: "Persona" },
-  { path: "/wizard/platform", label: "Platform" },
-  { path: "/wizard/review", label: "Review" },
+  { path: "/", label: "Template" },
+  { path: "/persona", label: "Persona" },
+  { path: "/platform", label: "Platform" },
+  { path: "/review", label: "Review" },
 ];
 
 export function WizardNav() {
   const [location] = useLocation();
+  // Convert the current location to a relative path
+  const relativePath = location.replace("/wizard", "") || "/";
 
   return (
     <nav className="flex gap-2">
       {steps.map((step, i) => {
-        const isActive = location === step.path;
-        const isPast = steps.findIndex(s => s.path === location) > i;
+        const isActive = relativePath === step.path;
+        const isPast = steps.findIndex(s => s.path === relativePath) > i;
 
         return (
-          <Link key={step.path} href={step.path}>
+          <Link key={step.path} href={`/wizard${step.path}`}>
             <button
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors
                 ${isActive ? "bg-primary text-primary-foreground" : 
