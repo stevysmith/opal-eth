@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { db } from '@db';
 import { giveaways, giveawayEntries, users } from '@db/schema';
-import { createUSDCPaymentService } from '../coinbase/agentKit';
+import coinbaseService from '../coinbase/agentKit';
 
 export class GiveawayPayoutService {
   async processGiveawayWinner(giveawayId: number, winnerId: string) {
@@ -32,11 +32,14 @@ export class GiveawayPayoutService {
       throw new Error('Winner has no wallet address configured. They need to set up their wallet address first.');
     }
 
-    // Initialize payment service
-    const paymentService = await createUSDCPaymentService(giveaway.agentId);
+    // Get or create MPC wallet for the agent
+    let walletId = await coinbaseService.getWalletForAgent(giveaway.agentId);
+    if (!walletId) {
+      walletId = await coinbaseService.createMpcWallet(giveaway.agentId);
+    }
 
     // Verify agent has sufficient balance
-    const balance = await paymentService.getBalance();
+    const balance = await coinbaseService.getWalletBalance(walletId);
     const defaultAmount = '10'; // Default 10 USDC for testing
 
     if (parseFloat(balance) < parseFloat(defaultAmount)) {
@@ -44,7 +47,7 @@ export class GiveawayPayoutService {
     }
 
     try {
-      const txHash = await paymentService.sendUsdc(winnerEntry.user.walletAddress, defaultAmount);
+      const txHash = await coinbaseService.sendUsdc(walletId, winnerEntry.user.walletAddress, defaultAmount);
 
       // Update giveaway with winner
       await db.update(giveaways)
