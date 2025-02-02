@@ -1,4 +1,3 @@
-
 import { 
   AgentKit,
   CdpWalletProvider,
@@ -31,53 +30,59 @@ class USDCPaymentService {
   }
 
   async initialize() {
-    // Initialize CDP Wallet Provider
-    const walletProvider = await CdpWalletProvider.configureWithWallet({
-      ...this.config,
-      cdpWalletData: undefined
-    });
-
-    // Initialize AgentKit with all required providers
-    this.agentKit = await AgentKit.from({
-      walletProvider,
-      actionProviders: [
-        walletActionProvider(),
-        erc20ActionProvider(),
-        cdpApiActionProvider({
-          apiKeyName: this.config.apiKeyName,
-          apiKeyPrivateKey: this.config.apiKeyPrivateKey,
-        }),
-        cdpWalletActionProvider({
-          apiKeyName: this.config.apiKeyName,
-          apiKeyPrivateKey: this.config.apiKeyPrivateKey,
-        }),
-      ],
-    });
-
-    // Check if wallet exists in database
-    const [existingWallet] = await db
-      .select()
-      .from(mpcWallets)
-      .where(eq(mpcWallets.agentId, this.agentId))
-      .limit(1);
-
-    if (!this.agentKit) {
-      throw new Error('Failed to initialize AgentKit');
-    }
-
-    if (existingWallet) {
-      // Load existing wallet
-      this.wallet = await walletProvider.getWallet(existingWallet.walletId);
-    } else {
-      // Create new wallet
-      const newWallet = await walletProvider.createWallet();
-      this.wallet = newWallet;
-
-      await db.insert(mpcWallets).values({
-        agentId: this.agentId,
-        walletId: newWallet.id,
-        createdAt: new Date(),
+    try {
+      // Initialize CDP Wallet Provider with proper configuration
+      const walletProvider = await CdpWalletProvider.configure({
+        apiKeyName: this.config.apiKeyName,
+        apiKeyPrivateKey: this.config.apiKeyPrivateKey,
+        networkId: this.config.networkId,
       });
+
+      // Initialize AgentKit with all required providers
+      this.agentKit = await AgentKit.from({
+        walletProvider,
+        actionProviders: [
+          walletActionProvider(),
+          erc20ActionProvider(),
+          cdpApiActionProvider({
+            apiKeyName: this.config.apiKeyName,
+            apiKeyPrivateKey: this.config.apiKeyPrivateKey,
+          }),
+          cdpWalletActionProvider({
+            apiKeyName: this.config.apiKeyName,
+            apiKeyPrivateKey: this.config.apiKeyPrivateKey,
+          }),
+        ],
+      });
+
+      // Check if wallet exists in database
+      const [existingWallet] = await db
+        .select()
+        .from(mpcWallets)
+        .where(eq(mpcWallets.agentId, this.agentId))
+        .limit(1);
+
+      if (!this.agentKit) {
+        throw new Error('Failed to initialize AgentKit');
+      }
+
+      if (existingWallet) {
+        // Load existing wallet
+        this.wallet = await this.agentKit.getWallet(existingWallet.walletId);
+      } else {
+        // Create new wallet using AgentKit
+        this.wallet = await this.agentKit.createWallet();
+
+        // Store the wallet ID
+        await db.insert(mpcWallets).values({
+          agentId: this.agentId,
+          walletId: this.wallet.id,
+          createdAt: new Date(),
+        });
+      }
+    } catch (error) {
+      console.error('Error initializing USDCPaymentService:', error);
+      throw error;
     }
   }
 
