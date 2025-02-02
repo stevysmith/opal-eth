@@ -1,31 +1,38 @@
 
-import { AgentKit, CdpWalletProvider } from '@coinbase/agentkit';
+import { AgentKit, CdpWalletProvider, walletActionProvider, erc20ActionProvider } from '@coinbase/agentkit';
 import { db } from "@db";
 import { mpcWallets } from "@db/schema";
 import { eq } from "drizzle-orm";
 
-interface AgentKitConfig {
-  apiKeyName: string;
-  apiKeyPrivateKey: string;
-}
-
 class CoinbaseService {
   private agentKit: AgentKit;
+  private config: {
+    apiKeyName: string;
+    apiKeyPrivateKey: string;
+    networkId: string;
+  };
 
-  constructor(config: AgentKitConfig) {
-    this.initializeAgentKit(config);
+  constructor(config: { apiKeyName: string; apiKeyPrivateKey: string }) {
+    this.config = {
+      apiKeyName: config.apiKeyName,
+      apiKeyPrivateKey: config.apiKeyPrivateKey.replace(/\\n/g, "\n"),
+      networkId: process.env.NETWORK_ID || "base-sepolia",
+    };
+    this.initializeAgentKit();
   }
 
-  private async initializeAgentKit(config: AgentKitConfig) {
-    const walletProvider = await CdpWalletProvider.configure({
-      apiKeyName: config.apiKeyName,
-      apiKeyPrivateKey: config.apiKeyPrivateKey,
-      networkId: process.env.NETWORK_ID || "base-sepolia",
+  private async initializeAgentKit() {
+    const walletProvider = await CdpWalletProvider.configureWithWallet({
+      ...this.config,
+      cdpWalletData: undefined // We'll manage wallet data through our database
     });
 
     this.agentKit = await AgentKit.from({
       walletProvider,
-      actionProviders: []
+      actionProviders: [
+        walletActionProvider(),
+        erc20ActionProvider(),
+      ],
     });
   }
 
@@ -45,6 +52,16 @@ class CoinbaseService {
       console.error('Error creating MPC wallet:', error);
       throw new Error('Failed to create MPC wallet');
     }
+  }
+
+  async getWalletForAgent(agentId: number): Promise<string | null> {
+    const [wallet] = await db
+      .select()
+      .from(mpcWallets)
+      .where(eq(mpcWallets.agentId, agentId))
+      .limit(1);
+
+    return wallet?.walletId || null;
   }
 
   async getWalletBalance(walletId: string): Promise<string> {
@@ -73,16 +90,6 @@ class CoinbaseService {
       console.error('Error sending USDC:', error);
       throw new Error('Failed to send USDC');
     }
-  }
-
-  async getWalletForAgent(agentId: number): Promise<string | null> {
-    const [wallet] = await db
-      .select()
-      .from(mpcWallets)
-      .where(eq(mpcWallets.agentId, agentId))
-      .limit(1);
-
-    return wallet?.walletId || null;
   }
 }
 
