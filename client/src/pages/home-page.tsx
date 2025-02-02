@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Plus, MessageSquare, Award, BarChart3, Loader2 } from "lucide-react";
 import type { SelectAgent } from "@db/schema";
@@ -111,7 +111,7 @@ export default function HomePage() {
                   </div>
                   <div className="text-sm">
                     <span className="font-medium">Channel:</span>{" "}
-                    {agent.platformConfig.channelId}
+                    {(agent.platformConfig as { channelId: string }).channelId}
                   </div>
                 </div>
               </CardContent>
