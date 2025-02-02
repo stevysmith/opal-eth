@@ -23,26 +23,27 @@ class CoinbaseService {
 
   private async initializeAgentKit() {
     try {
+      // Create action providers
       const wallet = walletActionProvider();
       const erc20 = erc20ActionProvider();
       
-      // Set action types using Object.defineProperty to ensure they are enumerable
-      Object.defineProperty(wallet, 'type', {
-        value: 'wallet',
-        enumerable: true,
-        configurable: true,
-        writable: true
-      });
+      // Directly set types as properties
+      wallet.type = 'wallet';
+      wallet.name = 'wallet';
       
-      Object.defineProperty(erc20, 'type', {
-        value: 'erc20',
-        enumerable: true,
-        configurable: true,
-        writable: true
-      });
+      erc20.type = 'erc20';
+      erc20.name = 'erc20';
 
-      console.log('Initializing wallet action:', wallet);
-      console.log('Initializing erc20 action:', erc20);
+      console.log('Initializing wallet action:', {
+        type: wallet.type,
+        name: wallet.name,
+        methods: Object.keys(wallet)
+      });
+      console.log('Initializing erc20 action:', {
+        type: erc20.type,
+        name: erc20.name,
+        methods: Object.keys(erc20)
+      });
       
       this.agentKit = await AgentKit.from({
         cdpApiKeyName: this.config.apiKeyName,
