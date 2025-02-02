@@ -22,13 +22,16 @@ class CoinbaseService {
   }
 
   private async initializeAgentKit() {
+    const wallet = walletActionProvider();
+    wallet.type = 'wallet';
+    
+    const erc20 = erc20ActionProvider();
+    erc20.type = 'erc20';
+    
     this.agentKit = await AgentKit.from({
       cdpApiKeyName: this.config.apiKeyName,
       cdpApiKeyPrivateKey: this.config.apiKeyPrivateKey,
-      actionProviders: [
-        walletActionProvider(),
-        erc20ActionProvider()
-      ],
+      actionProviders: [wallet, erc20],
     });
   }
 
