@@ -116,4 +116,28 @@ export function setupAuth(app: Express) {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     res.json(req.user);
   });
+
+  app.patch("/api/user/profile", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const { walletAddress } = req.body;
+    if (!walletAddress) {
+      return res.status(400).json({ message: "Wallet address is required" });
+    }
+
+    try {
+      const [updatedUser] = await db
+        .update(users)
+        .set({ walletAddress })
+        .where(eq(users.id, req.user.id))
+        .returning();
+
+      res.json(updatedUser);
+    } catch (error) {
+      console.error("Failed to update profile:", error);
+      res.status(500).json({ message: "Failed to update profile" });
+    }
+  });
 }

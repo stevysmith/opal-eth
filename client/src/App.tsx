@@ -8,6 +8,7 @@ import AuthPage from "@/pages/auth-page";
 import HomePage from "@/pages/home-page";
 import WizardPage from "@/pages/wizard";
 import AgentDetailsPage from "@/pages/agent-details";
+import ProfilePage from "@/pages/profile-page";
 import { ProtectedRoute } from "./lib/protected-route";
 
 function Router() {
@@ -15,6 +16,7 @@ function Router() {
     <Switch>
       <Route path="/auth" component={AuthPage} />
       <ProtectedRoute path="/" component={HomePage} />
+      <ProtectedRoute path="/profile" component={ProfilePage} />
       <ProtectedRoute path="/wizard" component={WizardPage} />
       <ProtectedRoute path="/wizard/*" component={WizardPage} />
       <Route path="/agents/:id">

@@ -2,7 +2,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
-import { Plus, MessageSquare, Award, BarChart3, Loader2 } from "lucide-react";
+import { Plus, MessageSquare, Award, BarChart3, Loader2, UserCircle } from "lucide-react";
 import type { SelectAgent } from "@db/schema";
 import {
   Card,
@@ -82,6 +82,12 @@ export default function HomePage() {
               <Button>
                 <Plus className="w-4 h-4 mr-2" />
                 New Agent
+              </Button>
+            </Link>
+            <Link href="/profile">
+              <Button variant="outline">
+                <UserCircle className="w-4 h-4 mr-2" />
+                Profile
               </Button>
             </Link>
             <Button variant="outline" onClick={() => logoutMutation.mutate()}>
