@@ -1,3 +1,4 @@
+
 import { 
   AgentKit,
   CdpWalletProvider,
@@ -22,7 +23,10 @@ const initializeAgentKit = async () => {
     networkId: process.env.NETWORK_ID || "base-sepolia",
   };
 
-  const walletProvider = await CdpWalletProvider.configure(config);
+  const walletProvider = await CdpWalletProvider.configureWithWallet({
+    ...config,
+    cdpWalletData: undefined
+  });
 
   return await AgentKit.from({
     walletProvider,
