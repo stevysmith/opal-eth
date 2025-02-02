@@ -428,13 +428,28 @@ class BotManager {
   private setupGiveawayCommands(bot: Telegraf<Context<Update>>, agentId: number) {
     console.log(`[Bot ${agentId}] Setting up giveaway commands`);
 
+    // Add middleware for logging all updates
+    bot.use(async (ctx, next) => {
+      console.log(`[Bot ${agentId}] Received update:`, {
+        type: ctx.updateType,
+        from: ctx.from,
+        chat: ctx.chat,
+        text: ctx.message?.text || ctx.channelPost?.text,
+      });
+      await next();
+    });
+
     bot.command("giveaway", async (ctx) => {
       try {
-        console.log(`[Bot ${agentId}] Received giveaway command:`, ctx.message.text);
-        const message = ctx.message.text.substring(9).trim(); // Remove '/giveaway '
+        const messageText = ctx.message?.text || '';
+        console.log(`[Bot ${agentId}] Processing giveaway command. Full message:`, messageText);
+
+        const message = messageText.substring(9).trim(); // Remove '/giveaway '
+        console.log(`[Bot ${agentId}] Parsed command text:`, message);
 
         // More flexible regex to handle various formats
         const match = message.match(/^(.*?)\s+in\s+(\d+)\s*(mins?|minutes?|hours?|h)$/i);
+        console.log(`[Bot ${agentId}] Regex match result:`, match);
 
         if (!match) {
           console.log(`[Bot ${agentId}] Invalid format:`, message);
@@ -451,7 +466,7 @@ class BotManager {
         console.log(`[Bot ${agentId}] Parsed giveaway:`, { prize, amount, unit });
 
         // Convert duration to hours
-        const isMinutes = unit.startsWith('min') || unit === 'm';
+        const isMinutes = unit.toLowerCase().startsWith('min') || unit.toLowerCase() === 'm';
         const durationHours = isMinutes ? parseInt(amount) / 60 : parseInt(amount);
         const endTime = new Date();
         endTime.setHours(endTime.getHours() + durationHours);
@@ -469,12 +484,14 @@ class BotManager {
         console.log(`[Bot ${agentId}] Created giveaway:`, giveaway);
 
         // Send confirmation message
-        await ctx.reply(
+        const response = await ctx.reply(
           `🎉 New Giveaway!\n\n` +
           `Prize: ${prize.trim()}\n` +
           `Duration: ${durationHours < 1 ? `${Math.round(durationHours * 60)} minutes` : `${durationHours} hours`}\n\n` +
           `Type /enter ${giveaway.id} to participate!`
         );
+
+        console.log(`[Bot ${agentId}] Sent confirmation message:`, response);
 
         // Schedule end of giveaway
         this.jobs.set(giveaway.id, schedule.scheduleJob(endTime, async () => {
