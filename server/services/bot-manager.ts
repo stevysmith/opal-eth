@@ -247,7 +247,7 @@ class BotManager {
       case "poll":
         return "📊 /poll \"Question\" [\"Option1\",\"Option2\"]\n🗳️ /vote <poll_id> <option_number>";
       case "giveaway":
-        return "🎉 /giveaway \"Prize\" in <duration_in_mins|hours|h>\n🎫 /enter <giveaway_id>";
+        return "🎉 /giveaway <prize> in <duration_in_mins|hours|h>\n🎫 /enter <giveaway_id>";
       case "qa":
         return "❓ Just send your questions in the chat!";
       default:
@@ -433,16 +433,17 @@ class BotManager {
         console.log(`[Bot ${agentId}] Received giveaway command:`, ctx.message.text);
         const message = ctx.message.text.substring(9).trim(); // Remove '/giveaway '
 
-        // Updated regex to better handle the command format
-        const match = message.match(/^"([^"]+)"\s+in\s+(\d+)\s*(mins?|hours?|h)$/i);
+        // More flexible regex to handle various formats
+        const match = message.match(/^(.*?)\s+in\s+(\d+)\s*(mins?|minutes?|hours?|h)$/i);
 
         if (!match) {
           console.log(`[Bot ${agentId}] Invalid format:`, message);
           return ctx.reply(
-            'Invalid format. Use: /giveaway "Prize Name" in <number> <hours/mins>\n' +
+            'Invalid format. Use: /giveaway <prize> in <number> <minutes/hours>\n' +
             'Examples:\n' +
-            '• /giveaway "Cool Prize" in 1 hour\n' +
-            '• /giveaway "Quick Prize" in 30 mins'
+            '• /giveaway 1 USDC in 1 hour\n' +
+            '• /giveaway 10 USDC in 30 minutes\n' +
+            '• /giveaway "Special NFT" in 5 mins'
           );
         }
 
@@ -450,7 +451,8 @@ class BotManager {
         console.log(`[Bot ${agentId}] Parsed giveaway:`, { prize, amount, unit });
 
         // Convert duration to hours
-        const durationHours = unit.startsWith('min') ? parseInt(amount) / 60 : parseInt(amount);
+        const isMinutes = unit.startsWith('min') || unit === 'm';
+        const durationHours = isMinutes ? parseInt(amount) / 60 : parseInt(amount);
         const endTime = new Date();
         endTime.setHours(endTime.getHours() + durationHours);
 
@@ -459,7 +461,7 @@ class BotManager {
         // Create the giveaway
         const [giveaway] = await db.insert(giveaways).values({
           agentId,
-          prize,
+          prize: prize.trim(),
           startTime: new Date(),
           endTime,
         }).returning();
@@ -469,7 +471,7 @@ class BotManager {
         // Send confirmation message
         await ctx.reply(
           `🎉 New Giveaway!\n\n` +
-          `Prize: ${prize}\n` +
+          `Prize: ${prize.trim()}\n` +
           `Duration: ${durationHours < 1 ? `${Math.round(durationHours * 60)} minutes` : `${durationHours} hours`}\n\n` +
           `Type /enter ${giveaway.id} to participate!`
         );
@@ -518,7 +520,7 @@ class BotManager {
                 `🎉 Giveaway Ended!\n\n` +
                 `Prize: ${prize}\n` +
                 `Winner: @${winner.userId}\n` +
-                `⚠️ Note: ${error.message}\n\n` +
+                `⚠️ Note: ${error instanceof Error ? error.message : 'Unknown error'}\n\n` +
                 `Congratulations to the winner! Our team will handle the payout manually.`
               );
             }
