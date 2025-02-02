@@ -1,4 +1,7 @@
-import { AgentKit, CdpWalletProvider, walletActionProvider, erc20ActionProvider } from '@coinbase/agentkit';
+
+import { AgentKit } from '@coinbase/agentkit';
+import { CdpWalletProvider } from '@coinbase/agentkit/dist/wallet-providers';
+import { walletActionProvider, erc20ActionProvider } from '@coinbase/agentkit/dist/action-providers';
 import { db } from "@db";
 import { mpcWallets } from "@db/schema";
 import { eq } from "drizzle-orm";
@@ -21,13 +24,9 @@ class CoinbaseService {
   }
 
   private async initializeAgentKit() {
-    const walletProvider = await CdpWalletProvider.configure({
-      ...this.config,
-      cdpWalletData: undefined // We'll manage wallet data through our database
-    });
-
     this.agentKit = await AgentKit.from({
-      walletProvider,
+      cdpApiKeyName: this.config.apiKeyName,
+      cdpApiKeyPrivateKey: this.config.apiKeyPrivateKey,
       actionProviders: [
         walletActionProvider(),
         erc20ActionProvider(),
@@ -37,7 +36,7 @@ class CoinbaseService {
 
   async createMpcWallet(agentId: number): Promise<string> {
     try {
-      const wallet = await this.agentKit.createWallet();
+      const wallet = await this.agentKit.getActions()[0].createWallet();
 
       await db.insert(mpcWallets).values({
         agentId,
@@ -64,7 +63,7 @@ class CoinbaseService {
 
   async getWalletBalance(walletId: string): Promise<string> {
     try {
-      const wallet = await this.agentKit.getWallet(walletId);
+      const wallet = await this.agentKit.getActions()[0].getWallet(walletId);
       const balance = await wallet.balance('USDC');
       return balance.toString();
     } catch (error) {
@@ -75,7 +74,7 @@ class CoinbaseService {
 
   async sendUsdc(fromWalletId: string, toAddress: string, amount: string): Promise<string> {
     try {
-      const wallet = await this.agentKit.getWallet(fromWalletId);
+      const wallet = await this.agentKit.getActions()[0].getWallet(fromWalletId);
       const tx = await wallet.send({
         to: toAddress,
         amount,

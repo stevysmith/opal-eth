@@ -1,3 +1,3 @@
-// This file is deprecated. Please use server/src/coinbase/agentKit.ts instead.
-// Re-export for backwards compatibility
-export { createUSDCPaymentService as default } from '../../src/coinbase/agentKit';
+
+// This file is being moved to server/src/coinbase/agentKit.ts
+export { default } from '../../src/coinbase/agentKit';
