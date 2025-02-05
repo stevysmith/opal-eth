@@ -10,41 +10,6 @@ class BotManager {
   private bots: Map<number, Telegraf<Context<Update>>> = new Map();
   private jobs: Map<number, schedule.Job> = new Map();
 
-  async stopAgent(agentId: number) {
-    try {
-      console.log(`[Bot ${agentId}] Stopping bot...`);
-      const bot = this.bots.get(agentId);
-      if (bot) {
-        await bot.stop('SIGTERM');
-        console.log(`[Bot ${agentId}] Bot stopped successfully`);
-
-        // Cancel any scheduled jobs
-        const job = this.jobs.get(agentId);
-        if (job) {
-          job.cancel();
-          this.jobs.delete(agentId);
-          console.log(`[Bot ${agentId}] Scheduled jobs cancelled`);
-        }
-
-        this.bots.delete(agentId);
-        console.log(`[Bot ${agentId}] Bot cleanup completed`);
-        return true;
-      }
-      console.log(`[Bot ${agentId}] No active bot found to stop`);
-      return false;
-    } catch (error) {
-      console.error(`[Bot ${agentId}] Error stopping bot:`, error);
-      // Clean up anyway
-      this.bots.delete(agentId);
-      this.jobs.delete(agentId);
-      throw error;
-    }
-  }
-
-  isAgentRunning(agentId: number): boolean {
-    return this.bots.has(agentId);
-  }
-
   async initializeAgent(agentId: number) {
     try {
       console.log(`[Bot ${agentId}] Starting agent initialization...`);
@@ -68,6 +33,11 @@ class BotManager {
       if (!config?.token) {
         throw new Error("Missing Telegram bot token");
       }
+
+      console.log(`[Bot ${agentId}] Using token from agent config:`, {
+        token: `${config.token.substring(0, 5)}...${config.token.substring(config.token.length - 5)}`,
+        channelId: config.channelId
+      });
 
       console.log(`[Bot ${agentId}] Creating new bot instance...`);
       const bot = new Telegraf(config.token);
@@ -104,7 +74,8 @@ class BotManager {
           throw new Error(`Telegram API error: ${errorData.description || 'Unknown error'}`);
         }
 
-        console.log(`[Bot ${agentId}] Telegram API connectivity test passed`);
+        const botInfo = await response.json();
+        console.log(`[Bot ${agentId}] Telegram API connectivity test passed. Bot info:`, botInfo);
       } catch (error) {
         if (error instanceof TypeError && error.message.includes('fetch')) {
           throw new Error("Network connectivity issue - Cannot reach Telegram API. This might be due to port restrictions or firewall settings.");
@@ -175,6 +146,42 @@ class BotManager {
       throw error;
     }
   }
+
+  async stopAgent(agentId: number) {
+    try {
+      console.log(`[Bot ${agentId}] Stopping bot...`);
+      const bot = this.bots.get(agentId);
+      if (bot) {
+        await bot.stop('SIGTERM');
+        console.log(`[Bot ${agentId}] Bot stopped successfully`);
+
+        // Cancel any scheduled jobs
+        const job = this.jobs.get(agentId);
+        if (job) {
+          job.cancel();
+          this.jobs.delete(agentId);
+          console.log(`[Bot ${agentId}] Scheduled jobs cancelled`);
+        }
+
+        this.bots.delete(agentId);
+        console.log(`[Bot ${agentId}] Bot cleanup completed`);
+        return true;
+      }
+      console.log(`[Bot ${agentId}] No active bot found to stop`);
+      return false;
+    } catch (error) {
+      console.error(`[Bot ${agentId}] Error stopping bot:`, error);
+      // Clean up anyway
+      this.bots.delete(agentId);
+      this.jobs.delete(agentId);
+      throw error;
+    }
+  }
+
+  isAgentRunning(agentId: number): boolean {
+    return this.bots.has(agentId);
+  }
+
 
   async stopAll() {
     console.log('Stopping all bots...');
