@@ -99,10 +99,12 @@ class BotManager {
 
         const webhookPath = `/webhook-${agentId}`;
         const launchConfig = {
-          webhook: {
-            domain: domain,
-            path: webhookPath,
-            port: 3000
+          dropPendingUpdates: true,
+          polling: {
+            timeout: 30,
+            limit: 100,
+            allowedUpdates: ['message', 'callback_query', 'channel_post'],
+            stopOnError: false // Continue polling even if an error occurs
           }
         };
         console.log(`[Bot ${agentId}] Launch configuration:`, launchConfig);
