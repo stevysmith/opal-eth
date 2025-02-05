@@ -91,17 +91,23 @@ class BotManager {
         console.log(`[Bot ${agentId}] Webhook cleared successfully`);
 
         console.log(`[Bot ${agentId}] Setting up launch configuration...`);
+        // Generate webhook domain using Replit's domain
+        const domain = process.env.REPL_SLUG ? 
+          `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co` :
+          'https://your-repl-domain.repl.co';
+
+        const webhookPath = `/webhook-${agentId}`;
         const launchConfig = {
-          dropPendingUpdates: true,
-          polling: {
-            timeout: 10, // Reduced timeout
-            limit: 100
+          webhook: {
+            domain: domain,
+            path: webhookPath,
+            port: 5000
           }
         };
         console.log(`[Bot ${agentId}] Launch configuration:`, launchConfig);
 
         let timeoutId: NodeJS.Timeout;
-        
+
         // Create the launch promise with detailed error handling
         console.log(`[Bot ${agentId}] Creating launch promise...`);
         const launchPromise = new Promise<boolean>(async (resolve, reject) => {
@@ -116,7 +122,7 @@ class BotManager {
           } else if (agent.template === "qa") {
             this.setupQACommands(bot, agentId);
           }
-          
+
           const cleanup = async () => {
             clearTimeout(timeoutId);
             if (!isLaunched) {
@@ -139,10 +145,10 @@ class BotManager {
             try {
               // Send a test message to verify channel access
               await bot.telegram.sendMessage(config.channelId, "🤖 Bot is initializing...");
-              
+
               // Add delay to respect rate limits
               await new Promise(resolve => setTimeout(resolve, 2000));
-              
+
               await bot.launch(launchConfig);
             } catch (error) {
               if (error.response?.error_code === 429) {
