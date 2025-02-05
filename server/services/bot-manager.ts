@@ -81,38 +81,61 @@ class BotManager {
         throw error;
       }
 
-      // Launch bot with better error handling
+      // Launch bot with better error handling and detailed logging
       try {
         console.log(`[Bot ${agentId}] Launching bot...`);
 
         // Clear any existing webhook
+        console.log(`[Bot ${agentId}] Clearing any existing webhooks...`);
         await bot.telegram.deleteWebhook();
+        console.log(`[Bot ${agentId}] Webhook cleared successfully`);
 
-        // Create a promise that will reject after 30 seconds
+        console.log(`[Bot ${agentId}] Setting up launch configuration...`);
+        const launchConfig = {
+          dropPendingUpdates: true,
+          polling: {
+            timeout: 30,
+            limit: 100
+          }
+        };
+        console.log(`[Bot ${agentId}] Launch configuration:`, launchConfig);
+
+        // Create the launch promise with detailed error handling
+        console.log(`[Bot ${agentId}] Creating launch promise...`);
+        const launchPromise = bot.launch(launchConfig)
+          .then(() => {
+            console.log(`[Bot ${agentId}] Launch promise resolved`);
+            return true;
+          })
+          .catch(error => {
+            console.error(`[Bot ${agentId}] Launch promise immediately rejected with error:`, {
+              error: error.message,
+              stack: error.stack,
+              name: error.name,
+              // Log any additional error properties
+              ...(error as any)
+            });
+            throw error;
+          });
+
+        console.log(`[Bot ${agentId}] Setting up timeout promise...`);
         const timeoutPromise = new Promise((_, reject) => {
           setTimeout(() => {
-            console.log(`[Bot ${agentId}] Launch timeout after 30 seconds`);
+            console.log(`[Bot ${agentId}] Timeout reached after 30 seconds`);
             reject(new Error("Bot initialization timed out after 30 seconds"));
           }, 30000);
         });
 
-        // Create the launch promise with error handling
-        const launchPromise = bot.launch().catch(error => {
-          console.error(`[Bot ${agentId}] Launch promise rejected with error:`, error);
-          throw error;
-        });
-
-        // Race between timeout and launch
+        console.log(`[Bot ${agentId}] Starting Promise.race between launch and timeout...`);
         await Promise.race([
-          launchPromise.then(() => {
-            console.log(`[Bot ${agentId}] Launch promise resolved successfully`);
-          }),
+          launchPromise,
           timeoutPromise
         ]);
 
-        console.log(`[Bot ${agentId}] Bot launched successfully, testing connection...`);
+        console.log(`[Bot ${agentId}] Promise.race completed successfully`);
 
-        // Verify the bot is actually running with a quick API call
+        // Verify the bot is actually running
+        console.log(`[Bot ${agentId}] Verifying bot is responsive...`);
         const me = await bot.telegram.getMe();
         console.log(`[Bot ${agentId}] Bot is responsive:`, me);
 
@@ -121,10 +144,14 @@ class BotManager {
 
         return true;
       } catch (error) {
-        console.error(`[Bot ${agentId}] Launch failed with error:`, error);
-        if (error instanceof Error) {
-          console.error(`[Bot ${agentId}] Error stack:`, error.stack);
-        }
+        console.error(`[Bot ${agentId}] Launch failed with error:`, {
+          message: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+          type: error instanceof Error ? error.name : typeof error,
+          fullError: error
+        });
+
+        await this.stopAgent(agentId);
         throw error;
       }
     } catch (error) {

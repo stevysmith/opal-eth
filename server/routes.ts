@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { db } from "@db";
-import { agents, polls, giveaways, type SelectAgent, type PlatformConfig, votes, giveawayEntries } from "@db/schema";
+import { agents, polls, votes, giveaways, giveawayEntries } from "@db/schema";
 import { eq, and, gt, desc } from "drizzle-orm";
 import { botManager } from "./services/bot-manager";
 import { giveawayPayoutService } from "./src/services/giveawayPayoutService";
@@ -50,11 +50,12 @@ export function registerRoutes(app: Express): Server {
         const config = agent.platformConfig as PlatformConfig;
         if (config?.token) {
           try {
+            console.log(`Initializing agent ${agent.id} with 30s timeout...`);
             // Initialize bot with timeout
             await Promise.race([
               botManager.initializeAgent(agent.id),
               new Promise((_, reject) => 
-                setTimeout(() => reject(new Error("Bot initialization timed out")), 15000)
+                setTimeout(() => reject(new Error("Bot initialization timed out after 30 seconds")), 30000)
               )
             ]);
 
@@ -325,7 +326,7 @@ export function registerRoutes(app: Express): Server {
           const success = await Promise.race([
             botManager.initializeAgent(agent.id),
             new Promise((_, reject) => 
-              setTimeout(() => reject(new Error("Bot initialization timed out")), 15000)
+              setTimeout(() => reject(new Error("Bot initialization timed out")), 30000)
             )
           ]);
           console.log(`Agent ${agentId} initialization ${success ? 'succeeded' : 'failed'}`);
