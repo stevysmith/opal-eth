@@ -81,32 +81,50 @@ class BotManager {
         throw error;
       }
 
-      // Launch bot with simpler configuration
+      // Launch bot with better error handling
       try {
         console.log(`[Bot ${agentId}] Launching bot...`);
 
         // Clear any existing webhook
         await bot.telegram.deleteWebhook();
 
-        // Launch with minimal configuration
+        // Create a promise that will reject after 30 seconds
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => {
+            console.log(`[Bot ${agentId}] Launch timeout after 30 seconds`);
+            reject(new Error("Bot initialization timed out after 30 seconds"));
+          }, 30000);
+        });
+
+        // Create the launch promise with error handling
+        const launchPromise = bot.launch().catch(error => {
+          console.error(`[Bot ${agentId}] Launch promise rejected with error:`, error);
+          throw error;
+        });
+
+        // Race between timeout and launch
         await Promise.race([
-          bot.launch({
-            dropPendingUpdates: true,
-            onStart: () => {
-              console.log(`[Bot ${agentId}] Bot started successfully`);
-            }
+          launchPromise.then(() => {
+            console.log(`[Bot ${agentId}] Launch promise resolved successfully`);
           }),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error("Bot initialization timed out")), 15000)
-          )
+          timeoutPromise
         ]);
+
+        console.log(`[Bot ${agentId}] Bot launched successfully, testing connection...`);
+
+        // Verify the bot is actually running with a quick API call
+        const me = await bot.telegram.getMe();
+        console.log(`[Bot ${agentId}] Bot is responsive:`, me);
 
         this.bots.set(agentId, bot);
         console.log(`[Bot ${agentId}] Bot registered successfully`);
 
         return true;
       } catch (error) {
-        console.error(`[Bot ${agentId}] Launch failed:`, error);
+        console.error(`[Bot ${agentId}] Launch failed with error:`, error);
+        if (error instanceof Error) {
+          console.error(`[Bot ${agentId}] Error stack:`, error.stack);
+        }
         throw error;
       }
     } catch (error) {
