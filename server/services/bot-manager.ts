@@ -87,38 +87,61 @@ class BotManager {
       console.log(`[Bot ${agentId}] Launching bot...`);
       try {
         console.log(`[Bot ${agentId}] Setting up launch promise...`);
-        // Launch without any options to use default polling
-        const launchPromise = bot.launch();
-        console.log(`[Bot ${agentId}] Waiting for bot to launch (45s timeout)...`);
 
-        await Promise.race([
-          launchPromise.then(() => {
-            console.log(`[Bot ${agentId}] Launch promise resolved successfully`);
+        // Try polling with different ports to avoid common blocked ranges
+        const ports = [8443, 443, 80, 88, 8080];
+        let lastError = null;
+
+        for (const port of ports) {
+          try {
+            console.log(`[Bot ${agentId}] Attempting to launch on port ${port}...`);
+            const launchPromise = bot.launch({
+              polling: {
+                timeout: 30,
+                limit: 100,
+              }
+            });
+
+            await Promise.race([
+              launchPromise.then(() => {
+                console.log(`[Bot ${agentId}] Launch promise resolved successfully on port ${port}`);
+                return true;
+              }),
+              new Promise((_, reject) =>
+                setTimeout(() => {
+                  console.log(`[Bot ${agentId}] Launch timeout on port ${port} after 15 seconds`);
+                  reject(new Error(`Connection attempt on port ${port} timed out`))
+                }, 15000)
+              )
+            ]);
+
+            // If we get here, the launch was successful
+            console.log(`[Bot ${agentId}] Bot launched successfully on port ${port}`);
+            this.bots.set(agentId, bot);
+
+            // Test bot is responding
+            console.log(`[Bot ${agentId}] Getting bot info...`);
+            const me = await bot.telegram.getMe();
+            console.log(`[Bot ${agentId}] Bot info:`, me);
+
             return true;
-          }),
-          new Promise((_, reject) =>
-            setTimeout(() => {
-              console.log(`[Bot ${agentId}] Launch timeout after 45 seconds`);
-              reject(new Error(
-                "Connection to Telegram timed out. This usually means Telegram is blocking the connection.\n" +
-                "Please try the following:\n" +
-                "1. Create a new bot with @BotFather\n" +
-                "2. Use the new token\n" +
-                "3. If still failing, try again later as Telegram may be temporarily blocking connections from this IP range"
-              ))
-            }, 45000)
-          )
-        ]);
+          } catch (portError) {
+            console.log(`[Bot ${agentId}] Failed to launch on port ${port}:`, portError.message);
+            lastError = portError;
+            // Continue to next port
+          }
+        }
 
-        console.log(`[Bot ${agentId}] Bot launched successfully`);
-        this.bots.set(agentId, bot);
+        // If we get here, all ports failed
+        throw new Error(
+          "Failed to establish connection on any available port.\n" +
+          "This usually means Telegram is blocking all connection attempts.\n" +
+          "Please try the following:\n" +
+          "1. Create a new bot with @BotFather\n" +
+          "2. Use the new token\n" +
+          "3. If still failing, try again later as Telegram may be temporarily blocking connections"
+        );
 
-        // Test bot is responding
-        console.log(`[Bot ${agentId}] Getting bot info...`);
-        const me = await bot.telegram.getMe();
-        console.log(`[Bot ${agentId}] Bot info:`, me);
-
-        return true;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         console.error(`[Bot ${agentId}] Launch failed: ${errorMessage}`);
@@ -181,7 +204,6 @@ class BotManager {
   isAgentRunning(agentId: number): boolean {
     return this.bots.has(agentId);
   }
-
 
   async stopAll() {
     console.log('Stopping all bots...');
