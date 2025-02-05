@@ -105,19 +105,35 @@ class BotManager {
         // Create the launch promise with detailed error handling
         console.log(`[Bot ${agentId}] Creating launch promise...`);
         const launchPromise = new Promise<boolean>(async (resolve, reject) => {
+          let isLaunched = false;
+          
           try {
-            timeoutId = setTimeout(() => {
+            timeoutId = setTimeout(async () => {
               console.log(`[Bot ${agentId}] Timeout reached after 30 seconds`);
-              bot.stop('SIGTERM').catch(console.error);
-              reject(new Error("Bot initialization timed out after 30 seconds"));
+              if (!isLaunched) {
+                try {
+                  await bot.telegram.close();
+                } catch (err) {
+                  console.error(`[Bot ${agentId}] Error closing bot:`, err);
+                }
+                reject(new Error("Bot initialization timed out after 30 seconds"));
+              }
             }, 30000);
 
             await bot.launch(launchConfig);
+            isLaunched = true;
             clearTimeout(timeoutId);
             console.log(`[Bot ${agentId}] Launch successful`);
             resolve(true);
           } catch (error) {
             clearTimeout(timeoutId);
+            if (!isLaunched) {
+              try {
+                await bot.telegram.close();
+              } catch (err) {
+                console.error(`[Bot ${agentId}] Error closing bot:`, err);
+              }
+            }
             console.error(`[Bot ${agentId}] Launch failed:`, error);
             reject(error);
           }
