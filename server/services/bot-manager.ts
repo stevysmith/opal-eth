@@ -94,43 +94,36 @@ class BotManager {
         const launchConfig = {
           dropPendingUpdates: true,
           polling: {
-            timeout: 30,
+            timeout: 10, // Reduced timeout
             limit: 100
           }
         };
         console.log(`[Bot ${agentId}] Launch configuration:`, launchConfig);
 
+        let timeoutId: NodeJS.Timeout;
+        
         // Create the launch promise with detailed error handling
         console.log(`[Bot ${agentId}] Creating launch promise...`);
-        const launchPromise = bot.launch(launchConfig)
-          .then(() => {
-            console.log(`[Bot ${agentId}] Launch promise resolved`);
-            return true;
-          })
-          .catch(error => {
-            console.error(`[Bot ${agentId}] Launch promise immediately rejected with error:`, {
-              error: error.message,
-              stack: error.stack,
-              name: error.name,
-              // Log any additional error properties
-              ...(error as any)
-            });
-            throw error;
-          });
+        const launchPromise = new Promise<boolean>(async (resolve, reject) => {
+          try {
+            timeoutId = setTimeout(() => {
+              console.log(`[Bot ${agentId}] Timeout reached after 30 seconds`);
+              bot.stop('SIGTERM').catch(console.error);
+              reject(new Error("Bot initialization timed out after 30 seconds"));
+            }, 30000);
 
-        console.log(`[Bot ${agentId}] Setting up timeout promise...`);
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => {
-            console.log(`[Bot ${agentId}] Timeout reached after 30 seconds`);
-            reject(new Error("Bot initialization timed out after 30 seconds"));
-          }, 30000);
+            await bot.launch(launchConfig);
+            clearTimeout(timeoutId);
+            console.log(`[Bot ${agentId}] Launch successful`);
+            resolve(true);
+          } catch (error) {
+            clearTimeout(timeoutId);
+            console.error(`[Bot ${agentId}] Launch failed:`, error);
+            reject(error);
+          }
         });
 
-        console.log(`[Bot ${agentId}] Starting Promise.race between launch and timeout...`);
-        await Promise.race([
-          launchPromise,
-          timeoutPromise
-        ]);
+        await launchPromise;
 
         console.log(`[Bot ${agentId}] Promise.race completed successfully`);
 
