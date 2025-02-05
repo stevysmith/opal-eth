@@ -4,6 +4,7 @@ import { db } from "@db";
 import { agents, polls, votes, giveaways, giveawayEntries } from "@db/schema";
 import { eq, and } from "drizzle-orm";
 import schedule from "node-schedule";
+import fetch from 'node-fetch';
 
 class BotManager {
   private bots: Map<number, Telegraf<Context<Update>>> = new Map();
@@ -81,86 +82,34 @@ class BotManager {
         });
       });
 
-      // Set up command handlers
-      console.log(`[Bot ${agentId}] Setting up command handlers...`);
-
-      bot.command('start', (ctx) => {
-        console.log(`[Bot ${agentId}] Start command received`);
-        return ctx.reply(`👋 Welcome! Use /enter <giveaway-id> <wallet-address> to participate in giveaways!`);
-      });
-
-      bot.command('help', (ctx) => {
-        console.log(`[Bot ${agentId}] Help command received`);
-        return ctx.reply(`Available commands:\n/enter <giveaway-id> <wallet-address>`);
-      });
-
-      // Add the enter command handler
-      bot.command('enter', async (ctx) => {
-        console.log(`[Bot ${agentId}] Enter command received:`, {
-          text: ctx.message.text,
-          from: ctx.from?.id,
-          chat: ctx.chat?.id
+      // Test network connectivity first
+      try {
+        console.log(`[Bot ${agentId}] Testing Telegram API connectivity...`);
+        const response = await fetch('https://api.telegram.org/bot' + config.token + '/getMe', {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' }
         });
 
-        try {
-          const text = ctx.message.text;
-          const parts = text.split(' ');
-
-          if (parts.length !== 3) {
-            return ctx.reply(
-              "Please provide both the giveaway ID and your wallet address.\n" +
-              "Format: /enter <giveaway-id> <wallet-address>\n" +
-              "Example: /enter 8 0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
-            );
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error(`[Bot ${agentId}] Telegram API test failed:`, errorData);
+          if (response.status === 429) {
+            throw new Error("Rate limited by Telegram - Please wait a few minutes and try again");
+          } else if (response.status === 401) {
+            throw new Error("Invalid bot token - Please check your token is correct");
+          } else if (errorData.description?.includes('blocked')) {
+            throw new Error("Connection blocked by Telegram - This might be due to port restrictions. Try recreating the bot with a new token.");
           }
-
-          const [, giveawayIdStr, walletAddress] = parts;
-          const giveawayId = parseInt(giveawayIdStr);
-
-          const [giveaway] = await db
-            .select()
-            .from(giveaways)
-            .where(eq(giveaways.id, giveawayId))
-            .limit(1);
-
-          if (!giveaway) {
-            return ctx.reply(`Giveaway #${giveawayId} not found`);
-          }
-
-          if (new Date() > giveaway.endTime) {
-            return ctx.reply(`Giveaway #${giveawayId} has already ended`);
-          }
-
-          const [existingEntry] = await db
-            .select()
-            .from(giveawayEntries)
-            .where(and(
-              eq(giveawayEntries.giveawayId, giveaway.id),
-              eq(giveawayEntries.userId, ctx.from.id.toString())
-            ))
-            .limit(1);
-
-          if (existingEntry) {
-            return ctx.reply("You have already entered this giveaway!");
-          }
-
-          await db.insert(giveawayEntries).values({
-            giveawayId: giveaway.id,
-            userId: ctx.from.id.toString(),
-            walletAddress,
-          });
-
-          return ctx.reply(
-            "🎉 Success! You've been entered into the giveaway!\n\n" +
-            `Prize: ${giveaway.prize}\n` +
-            `Your wallet: ${walletAddress}\n\n` +
-            "Good luck! Winners will be announced in the channel."
-          );
-        } catch (error) {
-          console.error(`[Bot ${agentId}] Error processing entry:`, error);
-          return ctx.reply("Sorry, something went wrong. Please try again.");
+          throw new Error(`Telegram API error: ${errorData.description || 'Unknown error'}`);
         }
-      });
+
+        console.log(`[Bot ${agentId}] Telegram API connectivity test passed`);
+      } catch (error) {
+        if (error instanceof TypeError && error.message.includes('fetch')) {
+          throw new Error("Network connectivity issue - Cannot reach Telegram API. This might be due to port restrictions.");
+        }
+        throw error;
+      }
 
       // Launch the bot with timeout and error handling
       console.log(`[Bot ${agentId}] Launching bot...`);
@@ -177,7 +126,7 @@ class BotManager {
           new Promise((_, reject) =>
             setTimeout(() => {
               console.log(`[Bot ${agentId}] Launch timeout after 30 seconds`);
-              reject(new Error("Launch timeout - Please check your bot token and ensure the bot is not already running elsewhere"))
+              reject(new Error("Connection blocked by Telegram - This might be due to port restrictions. Try recreating the bot with a new token."))
             }, 30000)
           )
         ]);
@@ -194,9 +143,15 @@ class BotManager {
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         console.error(`[Bot ${agentId}] Launch failed: ${errorMessage}`);
-        if (error instanceof Error && error.message.includes('unauthorized')) {
-          throw new Error("Invalid bot token - Please check your token is correct");
+
+        if (error instanceof Error) {
+          if (error.message.includes('ETELEGRAM')) {
+            throw new Error("Telegram API error - Please check your bot token and try again");
+          } else if (error.message.includes('ETIMEDOUT') || error.message.includes('blocked')) {
+            throw new Error("Connection blocked by Telegram - This might be due to port restrictions. Try recreating the bot with a new token.");
+          }
         }
+
         await this.stopAgent(agentId);
         throw error;
       }
