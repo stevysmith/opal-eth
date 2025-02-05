@@ -2,9 +2,9 @@ import { Telegraf, Context } from "telegraf";
 import { Update } from "telegraf/typings/core/types/typegram";
 import { db } from "@db";
 import { agents, polls, votes, giveaways, giveawayEntries } from "@db/schema";
-import { eq, and } from "drizzle-orm";
-import schedule from "node-schedule";
+import { eq } from "drizzle-orm";
 import fetch from 'node-fetch';
+import schedule from "node-schedule";
 
 class BotManager {
   private bots: Map<number, Telegraf<Context<Update>>> = new Map();
@@ -42,81 +42,71 @@ class BotManager {
       console.log(`[Bot ${agentId}] Creating new bot instance...`);
       const bot = new Telegraf(config.token);
 
-      // Add error handling first
+      // Add error handling
       bot.catch((err, ctx) => {
         console.error(`[Bot ${agentId}] Error in bot:`, {
           error: err,
           update: ctx.update,
-          chat: ctx.chat?.id,
-          from: ctx.from?.id
         });
       });
 
-      // Test network connectivity first with detailed error handling
+      // Test API connectivity
       try {
         console.log(`[Bot ${agentId}] Testing Telegram API connectivity...`);
-        const response = await fetch('https://api.telegram.org/bot' + config.token + '/getMe', {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' }
-        });
+        const response = await fetch(`https://api.telegram.org/bot${config.token}/getMe`);
 
         if (!response.ok) {
           const errorData = await response.json();
-          console.error(`[Bot ${agentId}] Telegram API test failed:`, errorData);
           throw new Error(`Telegram API error: ${errorData.description || 'Unknown error'}`);
         }
 
         const botInfo = await response.json();
-        console.log(`[Bot ${agentId}] Telegram API connectivity test passed. Bot info:`, botInfo);
-      } catch (error) {
-        if (error instanceof TypeError && error.message.includes('fetch')) {
-          throw new Error("Network connectivity issue - Cannot reach Telegram API");
+        console.log(`[Bot ${agentId}] Telegram API test succeeded. Bot info:`, botInfo);
+
+        // Additional connection test
+        console.log(`[Bot ${agentId}] Testing getUpdates API...`);
+        const updatesResponse = await fetch(
+          `https://api.telegram.org/bot${config.token}/getUpdates?timeout=10&limit=1`
+        );
+
+        if (!updatesResponse.ok) {
+          const updatesError = await updatesResponse.json();
+          throw new Error(`GetUpdates test failed: ${updatesError.description}`);
         }
+
+        console.log(`[Bot ${agentId}] GetUpdates test succeeded`);
+
+      } catch (error) {
+        console.error(`[Bot ${agentId}] API test failed:`, error);
         throw error;
       }
 
-      // Launch bot with detailed logging
-      console.log(`[Bot ${agentId}] Launching bot...`);
+      // Launch bot with simpler configuration
       try {
-        console.log(`[Bot ${agentId}] Setting up launch with polling...`);
+        console.log(`[Bot ${agentId}] Launching bot...`);
 
-        // Use Telegram's recommended polling configuration
-        await bot.telegram.deleteWebhook(); // Ensure no webhook is set
-        const launchPromise = bot.launch({
-          allowedUpdates: ['message', 'channel_post', 'callback_query'],
-          dropPendingUpdates: true
-        });
+        // Clear any existing webhook
+        await bot.telegram.deleteWebhook();
 
+        // Launch with minimal configuration
         await Promise.race([
-          launchPromise.then(() => {
-            console.log(`[Bot ${agentId}] Launch succeeded`);
-            return true;
+          bot.launch({
+            dropPendingUpdates: true,
+            onStart: () => {
+              console.log(`[Bot ${agentId}] Bot started successfully`);
+            }
           }),
-          new Promise((_, reject) =>
-            setTimeout(() => {
-              console.log(`[Bot ${agentId}] Launch timed out after 30 seconds`);
-              reject(new Error(
-                "Bot initialization timed out. This could be due to:\n" +
-                "1. Network restrictions\n" +
-                "2. Bot token already in use elsewhere\n" +
-                "3. Telegram API restrictions\n\n" +
-                "Please create a new bot with @BotFather and try again."
-              ))
-            }, 30000)
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error("Bot initialization timed out")), 15000)
           )
         ]);
 
-        // Test if bot is responsive
-        console.log(`[Bot ${agentId}] Testing bot responsiveness...`);
-        const me = await bot.telegram.getMe();
-        console.log(`[Bot ${agentId}] Bot is responsive:`, me);
-
         this.bots.set(agentId, bot);
-        return true;
+        console.log(`[Bot ${agentId}] Bot registered successfully`);
 
+        return true;
       } catch (error) {
         console.error(`[Bot ${agentId}] Launch failed:`, error);
-        await this.stopAgent(agentId);
         throw error;
       }
     } catch (error) {
@@ -132,27 +122,15 @@ class BotManager {
       const bot = this.bots.get(agentId);
       if (bot) {
         await bot.stop('SIGTERM');
-        console.log(`[Bot ${agentId}] Bot stopped successfully`);
-
-        // Cancel any scheduled jobs
-        const job = this.jobs.get(agentId);
-        if (job) {
-          job.cancel();
-          this.jobs.delete(agentId);
-          console.log(`[Bot ${agentId}] Scheduled jobs cancelled`);
-        }
-
         this.bots.delete(agentId);
-        console.log(`[Bot ${agentId}] Bot cleanup completed`);
+        console.log(`[Bot ${agentId}] Bot stopped successfully`);
         return true;
       }
       console.log(`[Bot ${agentId}] No active bot found to stop`);
       return false;
     } catch (error) {
       console.error(`[Bot ${agentId}] Error stopping bot:`, error);
-      // Clean up anyway
       this.bots.delete(agentId);
-      this.jobs.delete(agentId);
       throw error;
     }
   }
@@ -167,12 +145,6 @@ class BotManager {
       this.stopAgent(agentId)
     );
     await Promise.all(stopPromises);
-
-    // Clear all jobs
-    for (const job of this.jobs.values()) {
-      job.cancel();
-    }
-    this.jobs.clear();
     console.log('All bots stopped successfully');
   }
   private getCommandList(template: string): string {
