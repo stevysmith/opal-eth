@@ -63,14 +63,6 @@ class BotManager {
         if (!response.ok) {
           const errorData = await response.json();
           console.error(`[Bot ${agentId}] Telegram API test failed:`, errorData);
-
-          if (response.status === 429) {
-            throw new Error("Rate limited by Telegram - Please wait a few minutes and try again");
-          } else if (response.status === 401) {
-            throw new Error("Invalid bot token - Please check your token is correct");
-          } else if (errorData.description?.includes('blocked')) {
-            throw new Error("Connection blocked by Telegram - Please try the following:\n1. Create a new bot with @BotFather\n2. Use the new token\n3. If still failing, try at a different time as Telegram may be blocking the current IP/port range");
-          }
           throw new Error(`Telegram API error: ${errorData.description || 'Unknown error'}`);
         }
 
@@ -78,88 +70,52 @@ class BotManager {
         console.log(`[Bot ${agentId}] Telegram API connectivity test passed. Bot info:`, botInfo);
       } catch (error) {
         if (error instanceof TypeError && error.message.includes('fetch')) {
-          throw new Error("Network connectivity issue - Cannot reach Telegram API. This might be due to port restrictions or firewall settings.");
+          throw new Error("Network connectivity issue - Cannot reach Telegram API");
         }
         throw error;
       }
 
-      // Launch the bot with timeout and error handling
+      // Launch bot with detailed logging
       console.log(`[Bot ${agentId}] Launching bot...`);
       try {
-        console.log(`[Bot ${agentId}] Setting up launch promise...`);
+        console.log(`[Bot ${agentId}] Setting up launch with polling...`);
 
-        // Try polling with different ports to avoid common blocked ranges
-        const ports = [8443, 443, 80, 88, 8080];
-        let lastError = null;
+        // Use Telegram's recommended polling configuration
+        await bot.telegram.deleteWebhook(); // Ensure no webhook is set
+        const launchPromise = bot.launch({
+          allowedUpdates: ['message', 'channel_post', 'callback_query'],
+          dropPendingUpdates: true
+        });
 
-        for (const port of ports) {
-          try {
-            console.log(`[Bot ${agentId}] Attempting to launch on port ${port}...`);
-            const launchPromise = bot.launch({
-              polling: {
-                timeout: 30,
-                limit: 100,
-              }
-            });
-
-            await Promise.race([
-              launchPromise.then(() => {
-                console.log(`[Bot ${agentId}] Launch promise resolved successfully on port ${port}`);
-                return true;
-              }),
-              new Promise((_, reject) =>
-                setTimeout(() => {
-                  console.log(`[Bot ${agentId}] Launch timeout on port ${port} after 15 seconds`);
-                  reject(new Error(`Connection attempt on port ${port} timed out`))
-                }, 15000)
-              )
-            ]);
-
-            // If we get here, the launch was successful
-            console.log(`[Bot ${agentId}] Bot launched successfully on port ${port}`);
-            this.bots.set(agentId, bot);
-
-            // Test bot is responding
-            console.log(`[Bot ${agentId}] Getting bot info...`);
-            const me = await bot.telegram.getMe();
-            console.log(`[Bot ${agentId}] Bot info:`, me);
-
+        await Promise.race([
+          launchPromise.then(() => {
+            console.log(`[Bot ${agentId}] Launch succeeded`);
             return true;
-          } catch (portError) {
-            console.log(`[Bot ${agentId}] Failed to launch on port ${port}:`, portError.message);
-            lastError = portError;
-            // Continue to next port
-          }
-        }
+          }),
+          new Promise((_, reject) =>
+            setTimeout(() => {
+              console.log(`[Bot ${agentId}] Launch timed out after 30 seconds`);
+              reject(new Error(
+                "Bot initialization timed out. This could be due to:\n" +
+                "1. Network restrictions\n" +
+                "2. Bot token already in use elsewhere\n" +
+                "3. Telegram API restrictions\n\n" +
+                "Please create a new bot with @BotFather and try again."
+              ))
+            }, 30000)
+          )
+        ]);
 
-        // If we get here, all ports failed
-        throw new Error(
-          "Failed to establish connection on any available port.\n" +
-          "This usually means Telegram is blocking all connection attempts.\n" +
-          "Please try the following:\n" +
-          "1. Create a new bot with @BotFather\n" +
-          "2. Use the new token\n" +
-          "3. If still failing, try again later as Telegram may be temporarily blocking connections"
-        );
+        // Test if bot is responsive
+        console.log(`[Bot ${agentId}] Testing bot responsiveness...`);
+        const me = await bot.telegram.getMe();
+        console.log(`[Bot ${agentId}] Bot is responsive:`, me);
+
+        this.bots.set(agentId, bot);
+        return true;
 
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        console.error(`[Bot ${agentId}] Launch failed: ${errorMessage}`);
-
-        if (error instanceof Error) {
-          if (error.message.includes('ETELEGRAM')) {
-            throw new Error("Telegram API error - Please check your bot token and try again");
-          } else if (error.message.includes('ETIMEDOUT') || error.message.includes('blocked')) {
-            throw new Error(
-              "Connection blocked by Telegram - This usually means Telegram is blocking the connection.\n" +
-              "Please try the following:\n" +
-              "1. Create a new bot with @BotFather\n" +
-              "2. Use the new token\n" +
-              "3. If still failing, try again later as Telegram may be temporarily blocking connections from this IP range"
-            );
-          }
-        }
-
+        console.error(`[Bot ${agentId}] Launch failed:`, error);
         await this.stopAgent(agentId);
         throw error;
       }
