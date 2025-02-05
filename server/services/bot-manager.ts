@@ -82,7 +82,7 @@ class BotManager {
         });
       });
 
-      // Test network connectivity first
+      // Test network connectivity first with detailed error handling
       try {
         console.log(`[Bot ${agentId}] Testing Telegram API connectivity...`);
         const response = await fetch('https://api.telegram.org/bot' + config.token + '/getMe', {
@@ -93,12 +93,13 @@ class BotManager {
         if (!response.ok) {
           const errorData = await response.json();
           console.error(`[Bot ${agentId}] Telegram API test failed:`, errorData);
+
           if (response.status === 429) {
             throw new Error("Rate limited by Telegram - Please wait a few minutes and try again");
           } else if (response.status === 401) {
             throw new Error("Invalid bot token - Please check your token is correct");
           } else if (errorData.description?.includes('blocked')) {
-            throw new Error("Connection blocked by Telegram - This might be due to port restrictions. Try recreating the bot with a new token.");
+            throw new Error("Connection blocked by Telegram - Please try the following:\n1. Create a new bot with @BotFather\n2. Use the new token\n3. If still failing, try at a different time as Telegram may be blocking the current IP/port range");
           }
           throw new Error(`Telegram API error: ${errorData.description || 'Unknown error'}`);
         }
@@ -106,7 +107,7 @@ class BotManager {
         console.log(`[Bot ${agentId}] Telegram API connectivity test passed`);
       } catch (error) {
         if (error instanceof TypeError && error.message.includes('fetch')) {
-          throw new Error("Network connectivity issue - Cannot reach Telegram API. This might be due to port restrictions.");
+          throw new Error("Network connectivity issue - Cannot reach Telegram API. This might be due to port restrictions or firewall settings.");
         }
         throw error;
       }
@@ -115,8 +116,14 @@ class BotManager {
       console.log(`[Bot ${agentId}] Launching bot...`);
       try {
         console.log(`[Bot ${agentId}] Setting up launch promise...`);
-        const launchPromise = bot.launch();
-        console.log(`[Bot ${agentId}] Waiting for bot to launch (30s timeout)...`);
+        const launchPromise = bot.launch({
+          // Try to use polling instead of webhooks as it might have better chances
+          webhook: false,
+          polling: {
+            timeout: 30
+          }
+        });
+        console.log(`[Bot ${agentId}] Waiting for bot to launch (45s timeout)...`);
 
         await Promise.race([
           launchPromise.then(() => {
@@ -125,9 +132,15 @@ class BotManager {
           }),
           new Promise((_, reject) =>
             setTimeout(() => {
-              console.log(`[Bot ${agentId}] Launch timeout after 30 seconds`);
-              reject(new Error("Connection blocked by Telegram - This might be due to port restrictions. Try recreating the bot with a new token."))
-            }, 30000)
+              console.log(`[Bot ${agentId}] Launch timeout after 45 seconds`);
+              reject(new Error(
+                "Connection to Telegram timed out. This usually means Telegram is blocking the connection.\n" +
+                "Please try the following:\n" +
+                "1. Create a new bot with @BotFather\n" +
+                "2. Use the new token\n" +
+                "3. If still failing, try again later as Telegram may be temporarily blocking connections from this IP range"
+              ))
+            }, 45000)
           )
         ]);
 
@@ -148,7 +161,13 @@ class BotManager {
           if (error.message.includes('ETELEGRAM')) {
             throw new Error("Telegram API error - Please check your bot token and try again");
           } else if (error.message.includes('ETIMEDOUT') || error.message.includes('blocked')) {
-            throw new Error("Connection blocked by Telegram - This might be due to port restrictions. Try recreating the bot with a new token.");
+            throw new Error(
+              "Connection blocked by Telegram - This usually means Telegram is blocking the connection.\n" +
+              "Please try the following:\n" +
+              "1. Create a new bot with @BotFather\n" +
+              "2. Use the new token\n" +
+              "3. If still failing, try again later as Telegram may be temporarily blocking connections from this IP range"
+            );
           }
         }
 
