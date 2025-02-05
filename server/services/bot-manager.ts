@@ -92,9 +92,10 @@ class BotManager {
 
         console.log(`[Bot ${agentId}] Setting up launch configuration...`);
         // Generate webhook domain using Replit's domain
-        const domain = process.env.REPL_SLUG ? 
+        // Get the public URL from Replit environment
+        const domain = process.env.REPL_SLUG && process.env.REPL_OWNER ? 
           `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co` :
-          'https://your-repl-domain.repl.co';
+          `https://${process.env.REPL_ID}.id.repl.co`;
 
         const webhookPath = `/webhook-${agentId}`;
         const launchConfig = {
