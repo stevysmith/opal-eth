@@ -165,22 +165,38 @@ class BotManager {
       // Launch the bot with timeout and error handling
       console.log(`[Bot ${agentId}] Launching bot...`);
       try {
+        console.log(`[Bot ${agentId}] Setting up launch promise...`);
         const launchPromise = bot.launch();
+        console.log(`[Bot ${agentId}] Waiting for bot to launch (30s timeout)...`);
+
         await Promise.race([
-          launchPromise,
-          new Promise((_, reject) => setTimeout(() => reject(new Error("Launch timeout")), 10000))
+          launchPromise.then(() => {
+            console.log(`[Bot ${agentId}] Launch promise resolved successfully`);
+            return true;
+          }),
+          new Promise((_, reject) =>
+            setTimeout(() => {
+              console.log(`[Bot ${agentId}] Launch timeout after 30 seconds`);
+              reject(new Error("Launch timeout - Please check your bot token and ensure the bot is not already running elsewhere"))
+            }, 30000)
+          )
         ]);
 
         console.log(`[Bot ${agentId}] Bot launched successfully`);
         this.bots.set(agentId, bot);
 
         // Test bot is responding
+        console.log(`[Bot ${agentId}] Getting bot info...`);
         const me = await bot.telegram.getMe();
         console.log(`[Bot ${agentId}] Bot info:`, me);
 
         return true;
       } catch (error) {
-        console.error(`[Bot ${agentId}] Launch failed:`, error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`[Bot ${agentId}] Launch failed: ${errorMessage}`);
+        if (error instanceof Error && error.message.includes('unauthorized')) {
+          throw new Error("Invalid bot token - Please check your token is correct");
+        }
         await this.stopAgent(agentId);
         throw error;
       }
@@ -205,7 +221,7 @@ class BotManager {
     this.jobs.clear();
     console.log('All bots stopped successfully');
   }
-    private getCommandList(template: string): string {
+  private getCommandList(template: string): string {
     switch (template) {
       case "poll":
         return "📊 /poll \"Question\" [\"Option1\",\"Option2\"]\n🗳️ /vote <poll_id> <option_number>";
