@@ -49,7 +49,7 @@ class BotManager {
     try {
       console.log(`[Bot ${agentId}] Starting agent initialization...`);
 
-      // Stop any existing instance and wait for cleanup
+      // Stop any existing instance
       await this.stopAgent(agentId);
       console.log(`[Bot ${agentId}] Waiting for cleanup...`);
       await new Promise(resolve => setTimeout(resolve, 2000));
@@ -116,13 +116,8 @@ class BotManager {
       console.log(`[Bot ${agentId}] Launching bot...`);
       try {
         console.log(`[Bot ${agentId}] Setting up launch promise...`);
-        const launchPromise = bot.launch({
-          // Try to use polling instead of webhooks as it might have better chances
-          webhook: false,
-          polling: {
-            timeout: 30
-          }
-        });
+        // Launch without any options to use default polling
+        const launchPromise = bot.launch();
         console.log(`[Bot ${agentId}] Waiting for bot to launch (45s timeout)...`);
 
         await Promise.race([
