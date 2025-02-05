@@ -1,0 +1,57 @@
+Starting agent 24...
+[Bot 24] Starting agent initialization...
+[Bot 24] Stopping bot...
+[Bot 24] No active bot found to stop
+[Bot 24] Waiting for cleanup...
+[Bot 24] Using token from agent config: { token: '81701...ugUQE', channelId: '@opaleth' }
+[Bot 24] Creating new bot instance...
+[Bot 24] Testing Telegram API connectivity...
+[Bot 24] Telegram API test succeeded. Bot info: {
+  ok: true,
+  result: {
+    id: 8170179564,
+    is_bot: true,
+    first_name: 'OpalEth',
+    username: 'OpalEthBot',
+    can_join_groups: true,
+    can_read_all_group_messages: false,
+    supports_inline_queries: false,
+    can_connect_to_business: false,
+    has_main_web_app: false
+  }
+}
+[Bot 24] Testing getUpdates API...
+[Bot 24] GetUpdates test succeeded
+[Bot 24] Launching bot...
+[Bot 24] Clearing any existing webhooks...
+[Bot 24] Webhook cleared successfully
+[Bot 24] Setting up launch configuration...
+[Bot 24] Launch configuration: { dropPendingUpdates: true, polling: { timeout: 10, limit: 100 } }
+[Bot 24] Creating launch promise...
+[Bot 24] Setting up giveaway commands...
+[Bot 24] Command handlers registration completed
+[Bot 24] Timeout reached after 60 seconds
+[Bot 24] Error during cleanup: TelegramError: 429: Too Many Requests: retry after 296
+    at Telegram.callApi (/Users/stevesmith/Projects/opal-eth/node_modules/telegraf/lib/core/network/client.js:315:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async cleanup (file:///Users/stevesmith/Projects/opal-eth/server/services/bot-manager.ts:1:3020)
+    at async Timeout.<anonymous> (file:///Users/stevesmith/Projects/opal-eth/server/services/bot-manager.ts:1:3250) {
+  response: {
+    ok: false,
+    error_code: 429,
+    description: 'Too Many Requests: retry after 296',
+    parameters: { retry_after: 296 }
+  },
+  on: { method: 'close', payload: {} }
+}
+[Bot 24] Launch failed with error: {
+  message: 'Bot initialization timed out after 60 seconds',
+  stack: 'Error: Bot initialization timed out after 60 seconds\n' +
+    '    at Timeout.<anonymous> (file:///Users/stevesmith/Projects/opal-eth/server/services/bot-manager.ts:1:3273)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)',
+  type: 'Error',
+  fullError: Error: Bot initialization timed out after 60 seconds
+      at Timeout.<anonymous> (file:///Users/stevesmith/Projects/opal-eth/server/services/bot-manager.ts:1:3273)
+      at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+}
+[Bot 24] Stopping bot...
