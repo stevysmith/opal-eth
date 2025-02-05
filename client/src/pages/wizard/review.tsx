@@ -7,10 +7,24 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import { useWizard } from "@/hooks/use-wizard";
 
+interface WizardFormData {
+  template?: string;
+  name?: string;
+  persona?: {
+    description: string;
+    tone: string;
+  };
+  platform?: string;
+  platformConfig?: {
+    token: string;
+    channelId: string;
+  };
+}
+
 export default function ReviewStep() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const { formData, clearForm } = useWizard();
+  const { formData, clearForm } = useWizard<WizardFormData>();
 
   const createAgentMutation = useMutation({
     mutationFn: async () => {

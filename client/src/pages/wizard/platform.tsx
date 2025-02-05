@@ -34,14 +34,23 @@ const platformSchema = z.object({
 
 type PlatformFormData = z.infer<typeof platformSchema>;
 
+interface WizardFormData {
+  platform?: string;
+  platformConfig?: {
+    token: string;
+    channelId: string;
+  };
+  [key: string]: any;
+}
+
 export default function PlatformStep() {
   const [, navigate] = useLocation();
-  const { formData, setFormData } = useWizard();
+  const { formData, setFormData } = useWizard<WizardFormData>();
 
   const form = useForm<PlatformFormData>({
     resolver: zodResolver(platformSchema),
     defaultValues: {
-      platform: formData.platform || "telegram",
+      platform: (formData.platform as "telegram" | "discord") || "telegram",
       token: formData.platformConfig?.token || "",
       channelId: formData.platformConfig?.channelId || "",
     },
