@@ -22,11 +22,13 @@ const personaSchema = z.object({
   tone: z.string().min(3).max(50),
 });
 
+type PersonaFormData = z.infer<typeof personaSchema>;
+
 export default function PersonaStep() {
   const [, navigate] = useLocation();
   const { formData, setFormData } = useWizard();
 
-  const form = useForm({
+  const form = useForm<PersonaFormData>({
     resolver: zodResolver(personaSchema),
     defaultValues: {
       name: formData.name || "",
@@ -35,8 +37,9 @@ export default function PersonaStep() {
     },
   });
 
-  const onSubmit = form.handleSubmit((data) => {
-    setFormData({ 
+  const onSubmit = form.handleSubmit((data: PersonaFormData) => {
+    setFormData({
+      ...formData,
       name: data.name,
       persona: {
         description: data.description,

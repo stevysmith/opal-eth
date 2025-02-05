@@ -10,15 +10,14 @@ import { giveawayPayoutService } from "./src/services/giveawayPayoutService";
 export function registerRoutes(app: Express): Server {
   setupAuth(app);
 
-  // Update the POST /api/agents route to include token validation
   app.post("/api/agents", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
 
     try {
       // Check if token is already in use
       if (req.body.platform === "telegram") {
-        const token = req.body.platformConfig?.token;
-        if (!token) {
+        const platformConfig = req.body.platformConfig as PlatformConfig;
+        if (!platformConfig?.token) {
           return res.status(400).json({ error: "Missing Telegram bot token" });
         }
 
@@ -29,7 +28,7 @@ export function registerRoutes(app: Express): Server {
           )
         });
 
-        if (existingAgent && existingAgent.platformConfig.token === token) {
+        if (existingAgent && (existingAgent.platformConfig as PlatformConfig).token === platformConfig.token) {
           return res.status(400).json({ 
             error: "Token already in use", 
             message: "This Telegram bot token is already being used by another agent. Each agent needs its own unique bot token. Please create a new bot in Telegram and use its token." 

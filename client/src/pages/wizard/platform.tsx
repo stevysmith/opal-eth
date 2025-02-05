@@ -32,21 +32,24 @@ const platformSchema = z.object({
   channelId: z.string().min(1, "Channel ID is required"),
 });
 
+type PlatformFormData = z.infer<typeof platformSchema>;
+
 export default function PlatformStep() {
   const [, navigate] = useLocation();
   const { formData, setFormData } = useWizard();
 
-  const form = useForm({
+  const form = useForm<PlatformFormData>({
     resolver: zodResolver(platformSchema),
     defaultValues: {
-      platform: formData.platform as "telegram" | "discord" || "telegram",
+      platform: formData.platform || "telegram",
       token: formData.platformConfig?.token || "",
       channelId: formData.platformConfig?.channelId || "",
     },
   });
 
-  const onSubmit = form.handleSubmit((data) => {
+  const onSubmit = form.handleSubmit((data: PlatformFormData) => {
     setFormData({
+      ...formData,
       platform: data.platform,
       platformConfig: {
         token: data.token,
