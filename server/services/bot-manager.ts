@@ -101,7 +101,7 @@ class BotManager {
           webhook: {
             domain: domain,
             path: webhookPath,
-            port: 5000
+            port: 3000
           }
         };
         console.log(`[Bot ${agentId}] Launch configuration:`, launchConfig);
