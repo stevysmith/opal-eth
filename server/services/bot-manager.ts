@@ -131,15 +131,29 @@ class BotManager {
 
           try {
             timeoutId = setTimeout(async () => {
-              console.log(`[Bot ${agentId}] Timeout reached after 30 seconds`);
+              console.log(`[Bot ${agentId}] Timeout reached after 60 seconds`);
               await cleanup();
-              reject(new Error("Bot initialization timed out after 30 seconds"));
-            }, 30000);
+              reject(new Error("Bot initialization timed out after 60 seconds"));
+            }, 60000);
 
-            // Send a test message to verify channel access
-            await bot.telegram.sendMessage(config.channelId, "🤖 Bot is initializing...");
-            
-            await bot.launch(launchConfig);
+            try {
+              // Send a test message to verify channel access
+              await bot.telegram.sendMessage(config.channelId, "🤖 Bot is initializing...");
+              
+              // Add delay to respect rate limits
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              
+              await bot.launch(launchConfig);
+            } catch (error) {
+              if (error.response?.error_code === 429) {
+                const retryAfter = error.response.parameters.retry_after || 30;
+                console.log(`[Bot ${agentId}] Rate limited, waiting ${retryAfter}s before retry...`);
+                await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+                await bot.launch(launchConfig);
+              } else {
+                throw error;
+              }
+            }
             isLaunched = true;
             await cleanup();
             console.log(`[Bot ${agentId}] Launch successful`);
