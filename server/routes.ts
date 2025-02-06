@@ -322,13 +322,7 @@ export function registerRoutes(app: Express): Server {
       } else {
         try {
           console.log(`Starting agent ${agentId}...`);
-          // Add timeout to bot initialization
-          const success = await Promise.race([
-            botManager.initializeAgent(agent.id),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error("Bot initialization timed out")), 30000)
-            )
-          ]);
+          const success = await botManager.initializeAgent(agent.id);
           console.log(`Agent ${agentId} initialization ${success ? 'succeeded' : 'failed'}`);
 
           const [updatedAgent] = await db
