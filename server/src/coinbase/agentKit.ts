@@ -1,4 +1,3 @@
-
 import { AgentKit, walletActionProvider, erc20ActionProvider } from '@coinbase/agentkit';
 import { db } from "@db";
 import { mpcWallets } from "@db/schema";
@@ -23,32 +22,48 @@ class CoinbaseService {
 
   private async initializeAgentKit() {
     try {
-      const wallet = walletActionProvider();
-      const erc20 = erc20ActionProvider();
-      
-      // Set action types using Object.defineProperty to ensure they are enumerable
-      Object.defineProperty(wallet, 'type', {
-        value: 'wallet',
-        enumerable: true,
-        configurable: true,
-        writable: true
-      });
-      
-      Object.defineProperty(erc20, 'type', {
-        value: 'erc20',
-        enumerable: true,
-        configurable: true,
-        writable: true
+      // Create action providers first
+      const walletProvider = walletActionProvider();
+      const erc20Provider = erc20ActionProvider();
+
+      // Create the providers with proper interface implementation
+      const wallet = {
+        name: 'wallet',
+        actionProviders: [],
+        supportsNetwork: (_: any) => true,
+        ...walletProvider,
+        getActions: () => [walletProvider]
+      };
+
+      const erc20 = {
+        name: 'erc20',
+        actionProviders: [],
+        supportsNetwork: (_: any) => true,
+        ...erc20Provider,
+        getActions: () => [erc20Provider]
+      };
+
+      console.log('Initializing AgentKit with providers:', {
+        wallet: {
+          name: wallet.name,
+          methods: Object.keys(walletProvider)
+        },
+        erc20: {
+          name: erc20.name,
+          methods: Object.keys(erc20Provider)
+        }
       });
 
-      console.log('Initializing wallet action:', wallet);
-      console.log('Initializing erc20 action:', erc20);
-      
       this.agentKit = await AgentKit.from({
         cdpApiKeyName: this.config.apiKeyName,
         cdpApiKeyPrivateKey: this.config.apiKeyPrivateKey,
         actionProviders: [wallet, erc20],
       });
+
+      // Verify initialization
+      const actions = this.agentKit.getActions();
+      console.log('AgentKit initialized with actions:', actions);
+
     } catch (error) {
       console.error('Error initializing AgentKit:', error);
       throw error;
@@ -58,23 +73,20 @@ class CoinbaseService {
   async createMpcWallet(agentId: number): Promise<string> {
     try {
       console.log('Creating MPC wallet for agent:', agentId);
-      
+
       const actions = this.agentKit.getActions();
-      console.log('Available actions:', actions.map(a => ({ type: a.type, methods: Object.keys(a) })));
-      
-      const walletAction = actions.find(action => action.type === 'wallet');
-      console.log('Found wallet action:', walletAction ? 'yes' : 'no', walletAction);
-      
+      const walletAction = actions.find(a => a.name === 'wallet');
+
       if (!walletAction) {
         throw new Error('Wallet action provider not found');
       }
 
-      console.log('Attempting to create wallet...');
+      console.log('Creating wallet...');
       const wallet = await walletAction.createWallet();
-      console.log('Wallet creation response:', wallet);
+      console.log('Wallet created:', wallet);
 
-      if (!wallet) {
-        throw new Error('Wallet creation returned null/undefined');
+      if (!wallet?.id) {
+        throw new Error('Wallet creation failed - no wallet ID returned');
       }
 
       console.log('Inserting wallet record into database...');
@@ -94,7 +106,7 @@ class CoinbaseService {
           hasActions: this.agentKit?.getActions()?.length > 0
         }
       });
-      throw error; // Throw original error to preserve stack trace
+      throw error;
     }
   }
 
@@ -115,10 +127,13 @@ class CoinbaseService {
 
   async getWalletBalance(walletId: string): Promise<string> {
     try {
-      const walletAction = this.agentKit.getActions().find(action => action.type === 'wallet');
+      const actions = this.agentKit.getActions();
+      const walletAction = actions.find(a => a.name === 'wallet');
+
       if (!walletAction) {
         throw new Error('Wallet action not found');
       }
+
       const wallet = await walletAction.getWallet(walletId);
       const balance = await wallet.getBalance('USDC');
       return balance.toString();
@@ -130,10 +145,13 @@ class CoinbaseService {
 
   async sendUsdc(fromWalletId: string, toAddress: string, amount: string): Promise<string> {
     try {
-      const walletAction = this.agentKit.getActions().find(action => action.type === 'wallet');
+      const actions = this.agentKit.getActions();
+      const walletAction = actions.find(a => a.name === 'wallet');
+
       if (!walletAction) {
         throw new Error('Wallet action not found');
       }
+
       const wallet = await walletAction.getWallet(fromWalletId);
       const tx = await wallet.send({
         to: toAddress,
