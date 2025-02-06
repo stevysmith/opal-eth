@@ -29,32 +29,11 @@ class GiveawayPayoutService {
         throw new Error("Winner wallet address not found");
       }
 
-      // Get or create agent wallet
-      let agentWalletAddress = await coinbaseService.getWalletForAgent(
-        giveaway.agentId,
-      );
-
-      if (!agentWalletAddress) {
-        agentWalletAddress = await coinbaseService.createMpcWallet(
-          giveaway.agentId,
-        );
-      }
-
       // Parse prize amount (assuming prize is in format "X USDC")
       const amount = giveaway.prize.split(" ")[0];
 
-      // Check wallet balance
-      const balance =
-        await coinbaseService.getWalletBalance(agentWalletAddress);
-      if (parseFloat(balance) < parseFloat(amount)) {
-        throw new Error(
-          `Insufficient balance. Required: ${amount} USDC, Available: ${balance} USDC`,
-        );
-      }
-
       // Send USDC to winner
       const txHash = await coinbaseService.sendUsdc(
-        agentWalletAddress,
         winnerEntry.walletAddress,
         amount,
       );

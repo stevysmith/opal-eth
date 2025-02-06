@@ -1,5 +1,9 @@
-import { AgentKit, CdpWalletProvider } from "@coinbase/agentkit";
-import { Coinbase, Wallet } from "@coinbase/coinbase-sdk";
+import {
+  AgentKit,
+  CdpWalletProvider,
+  erc20ActionProvider,
+  cdpApiActionProvider,
+} from "@coinbase/agentkit";
 import { db } from "@db";
 import { mpcWallets } from "@db/schema";
 import { eq } from "drizzle-orm";
@@ -10,6 +14,13 @@ class CoinbaseService {
     apiKeyName: string;
     apiKeyPrivateKey: string;
     networkId: string;
+    treasuryAddress: string;
+  };
+
+  // USDC contract addresses for different networks
+  private readonly USDC_CONTRACTS = {
+    "base-sepolia": "0x6Ac3aB54Dc5019A2e57eCcb214337FF5bbD52897", // Base Sepolia USDC
+    "base-mainnet": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // Base Mainnet USDC
   };
 
   constructor(config: { apiKeyName: string; apiKeyPrivateKey: string }) {
@@ -17,27 +28,35 @@ class CoinbaseService {
       apiKeyName: config.apiKeyName,
       apiKeyPrivateKey: config.apiKeyPrivateKey.replace(/\\n/g, "\n"),
       networkId: process.env.NETWORK_ID || "base-sepolia",
+      treasuryAddress: process.env.TREASURY_WALLET_ADDRESS || "",
     };
+
+    if (!this.config.treasuryAddress) {
+      throw new Error(
+        "TREASURY_WALLET_ADDRESS environment variable is required",
+      );
+    }
   }
 
   async initialize() {
     try {
-      // Configure the Coinbase SDK
-      Coinbase.configure({
-        apiKeyName: this.config.apiKeyName,
-        privateKey: this.config.apiKeyPrivateKey,
-      });
-
-      // Configure CDP Wallet Provider
+      // First configure the wallet provider
       const walletProvider = await CdpWalletProvider.configureWithWallet({
         apiKeyName: this.config.apiKeyName,
         apiKeyPrivateKey: this.config.apiKeyPrivateKey,
         networkId: this.config.networkId,
       });
 
-      // Initialize AgentKit with the wallet provider
+      // Initialize AgentKit with providers
       this.agentKit = await AgentKit.from({
         walletProvider,
+        actionProviders: [
+          cdpApiActionProvider({
+            apiKeyName: this.config.apiKeyName,
+            apiKeyPrivateKey: this.config.apiKeyPrivateKey,
+          }),
+          erc20ActionProvider(),
+        ],
       });
 
       console.log("CoinbaseService initialized successfully");
@@ -47,133 +66,113 @@ class CoinbaseService {
     }
   }
 
-  async createMpcWallet(agentId: number): Promise<string> {
+  async sendUsdc(toAddress: string, amount: string): Promise<string> {
     try {
-      console.log("Creating MPC wallet for agent:", agentId);
+      // Get available actions
+      const actions = this.agentKit.getActions();
+      console.log(
+        "Available actions for sendUsdc:",
+        actions.map((a) => a.name),
+      );
 
-      // Create a new wallet using Coinbase SDK
-      const wallet = await Wallet.create({
-        networkId: this.config.networkId as Coinbase.networks,
-      });
-
-      if (!wallet) {
-        throw new Error("Wallet creation failed");
+      // Get the transfer action first
+      const transferAction = actions.find(
+        (a) => a.name === "ERC20ActionProvider_transfer",
+      );
+      if (!transferAction) {
+        console.log(
+          "Available actions:",
+          actions.map((a) => ({ name: a.name, methods: Object.keys(a) })),
+        );
+        throw new Error(
+          "Transfer action not found. Available actions: " +
+            actions.map((a) => a.name).join(", "),
+        );
       }
 
-      // Get the default address of the wallet
-      const address = await wallet.getDefaultAddress();
-
-      console.log("Wallet created:", {
-        address,
-        agentId,
+      // Log the schema shape to understand expected parameters
+      console.log("Transfer action schema shape:", {
+        description: transferAction.description,
+        shape: Object.keys(transferAction.schema._def.shape()),
       });
 
-      // Export wallet data for persistence
-      const walletData = wallet.export();
-
-      // Store the wallet information in the database
-      await db.insert(mpcWallets).values({
-        agentId,
-        walletId: address,
-        walletData: JSON.stringify(walletData), // Store the export data for reinitialization
-        createdAt: new Date(),
-      });
-
-      // Request funds from faucet if on testnet
-      if (this.config.networkId === "base-sepolia") {
-        try {
-          const faucetTx = await wallet.faucet();
-          console.log("Faucet transaction:", faucetTx);
-        } catch (error) {
-          console.warn("Faucet request failed:", error);
-        }
+      // Get USDC contract address for current network
+      const usdcAddress =
+        this.USDC_CONTRACTS[
+          this.config.networkId as keyof typeof this.USDC_CONTRACTS
+        ];
+      if (!usdcAddress) {
+        throw new Error(
+          `No USDC contract address configured for network: ${this.config.networkId}`,
+        );
       }
 
-      return address;
-    } catch (error) {
-      console.error("Error creating MPC wallet:", {
-        error,
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-      throw error;
-    }
-  }
+      // Convert amount to USDC base units (6 decimals)
+      const baseUnits = BigInt(Math.round(parseFloat(amount) * 1_000_000));
 
-  async getWalletForAgent(agentId: number): Promise<string | null> {
-    try {
-      const [walletRecord] = await db
-        .select()
-        .from(mpcWallets)
-        .where(eq(mpcWallets.agentId, agentId))
-        .limit(1);
-
-      return walletRecord?.walletId || null;
-    } catch (error) {
-      console.error("Error getting wallet for agent:", error);
-      throw new Error("Failed to get wallet for agent");
-    }
-  }
-
-  async sendUsdc(
-    fromWalletAddress: string,
-    toAddress: string,
-    amount: string,
-  ): Promise<string> {
-    try {
-      // Retrieve the wallet record to get the export data
-      const [walletRecord] = await db
-        .select()
-        .from(mpcWallets)
-        .where(eq(mpcWallets.walletId, fromWalletAddress))
-        .limit(1);
-
-      if (!walletRecord?.walletData) {
-        throw new Error("Wallet data not found");
-      }
-
-      // Re-instantiate the wallet
-      const wallet = await Wallet.import(JSON.parse(walletRecord.walletData));
-
-      // Create gasless USDC transfer
-      const transfer = await wallet.createTransfer({
-        amount: parseFloat(amount),
-        assetId: Coinbase.assets.Usdc,
+      // Create the transfer parameters
+      const transferParams = {
+        amount: baseUnits.toString(),
+        contractAddress: usdcAddress,
         destination: toAddress,
-        gasless: true,
-        skipBatching: true, // Process immediately
+      };
+
+      console.log("Attempting USDC transfer with params:", {
+        ...transferParams.args,
+        originalAmount: amount,
+        amountAsString: baseUnits.toString(),
+        network: this.config.networkId,
       });
 
-      // Wait for transfer to complete
-      const completedTransfer = await transfer.wait();
-      return completedTransfer.hash;
+      // Call the transfer method using invoke
+      const tx = await transferAction.invoke(transferParams);
+
+      console.log("Transfer response:", tx);
+      return tx.hash;
     } catch (error) {
       console.error("Error sending USDC:", error);
-      throw new Error("Failed to send USDC");
+      throw new Error(
+        "Failed to send USDC: " +
+          (error instanceof Error ? error.message : "Unknown error"),
+      );
     }
   }
 
-  async getWalletBalance(walletAddress: string): Promise<string> {
+  async getUsdcBalance(walletAddress: string): Promise<string> {
     try {
-      // Retrieve the wallet record to get the export data
-      const [walletRecord] = await db
-        .select()
-        .from(mpcWallets)
-        .where(eq(mpcWallets.walletId, walletAddress))
-        .limit(1);
+      // Get available actions
+      const actions = this.agentKit.getActions();
+      const balanceAction = actions.find(
+        (a) => a.name === "ERC20ActionProvider_get_balance",
+      );
 
-      if (!walletRecord?.walletData) {
-        throw new Error("Wallet data not found");
+      if (!balanceAction) {
+        throw new Error("Balance action not found");
       }
 
-      // Re-instantiate the wallet
-      const wallet = await Wallet.import(JSON.parse(walletRecord.walletData));
+      // Get USDC contract address for current network
+      const usdcAddress =
+        this.USDC_CONTRACTS[
+          this.config.networkId as keyof typeof this.USDC_CONTRACTS
+        ];
+      if (!usdcAddress) {
+        throw new Error(
+          `No USDC contract address configured for network: ${this.config.networkId}`,
+        );
+      }
 
-      // Get USDC balance
-      const balance = await wallet.getBalance(Coinbase.assets.Usdc);
+      // Get USDC balance using invoke
+      const balance = await balanceAction.invoke({
+        args: {
+          wallet: walletAddress,
+          contractAddress: usdcAddress,
+        },
+      });
+
       return balance.toString();
     } catch (error) {
-      console.error("Error getting wallet balance:", error);
-      throw new Error("Failed to get wallet balance");
+      console.error("Error getting USDC balance:", error);
+      throw new Error("Failed to get USDC balance");
     }
   }
 }
