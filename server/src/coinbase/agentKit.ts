@@ -7,6 +7,7 @@ import {
 import { db } from "@db";
 import { mpcWallets } from "@db/schema";
 import { eq } from "drizzle-orm";
+import { ethers } from "ethers";
 
 class CoinbaseService {
   private agentKit: AgentKit;
@@ -88,34 +89,28 @@ class CoinbaseService {
 
   async approveUsdc(): Promise<string> {
     try {
-      await this.ensureInitialized();
-
-      const actions = this.agentKit.getActions();
-      console.log(
-        "ERC20 actions available:",
-        actions.map((a) => a.name),
-      );
-
-      // Replace with correct name if it’s different:
-      const approveAction = actions.find(
-        (a) => a.name === "ERC20ActionProvider_approve",
-      );
-
-      if (!approveAction) {
-        throw new Error("Approve action not found");
-      }
+      const walletProvider = await CdpWalletProvider.configureWithWallet({
+        apiKeyName: this.config.apiKeyName,
+        apiKeyPrivateKey: this.config.apiKeyPrivateKey,
+        networkId: this.config.networkId,
+      });
 
       const usdcAddress =
         this.USDC_CONTRACTS[
           this.config.networkId as keyof typeof this.USDC_CONTRACTS
         ];
 
-      const tx = await approveAction.invoke({
-        contractAddress: usdcAddress,
-        spender: this.config.treasuryAddress,
-        amount:
-          "115792089237316195423570985008687907853269984665640564039457584007913129639935", // max uint256
+      const approvalAmount = "115792089237316195423570985008687907853269984665640564039457584007913129639935"; // max uint256
+
+      const tx = await walletProvider.sendTransaction({
+        to: usdcAddress,
+        data: new ethers.utils.Interface([
+          "function approve(address spender, uint256 amount)"
+        ]).encodeFunctionData("approve", [this.config.treasuryAddress, approvalAmount]),
       });
+
+      console.log("Approve transaction hash:", tx.hash);
+      await tx.wait();
 
       return tx.hash;
     } catch (error) {
