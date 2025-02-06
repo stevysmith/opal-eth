@@ -97,21 +97,15 @@ class BotManager {
           `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co` :
           `https://${process.env.REPL_ID}.id.repl.co`;
 
-        const webhookPath = `/webhook-${agentId}`;
         const launchConfig = {
           dropPendingUpdates: true,
-          polling: {
-            timeout: 30,
-            limit: 100,
-            allowedUpdates: ['message', 'callback_query', 'channel_post'],
-            stopOnError: false // Continue polling even if an error occurs
-          }
+          allowedUpdates: ['message', 'callback_query', 'channel_post']
         };
-        console.log(`[Bot ${agentId}] Launch configuration:`, launchConfig);
+        console.log(`[Bot ${agentId}] Launch configuration (polling):`, launchConfig);
 
         let timeoutId: NodeJS.Timeout;
 
-        // Create the launch promise with detailed error handling
+        // Create the launch promise with simplified polling setup
         console.log(`[Bot ${agentId}] Creating launch promise...`);
         const launchPromise = new Promise<boolean>(async (resolve, reject) => {
           let isLaunched = false;
