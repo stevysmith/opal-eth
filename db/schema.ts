@@ -14,6 +14,7 @@ export const mpcWallets = pgTable("mpc_wallets", {
   id: serial("id").primaryKey(),
   agentId: integer("agent_id").notNull().references(() => agents.id),
   walletId: text("wallet_id").notNull(),
+  walletData: text("wallet_data"),  // Changed to be nullable for existing records
   createdAt: timestamp("created_at").notNull().default(new Date()),
 });
 
