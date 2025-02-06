@@ -56,8 +56,10 @@ class CoinbaseService {
             apiKeyPrivateKey: this.config.apiKeyPrivateKey,
           }),
           erc20ActionProvider({
-            walletProvider, // Pass the wallet provider to ERC20 actions
+            walletProvider,
             networkId: this.config.networkId,
+            chainId: "0x14a33",  // Base Sepolia chain ID
+            provider: walletProvider.getProvider(),
           }),
         ],
       });
