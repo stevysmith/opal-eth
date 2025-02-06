@@ -105,24 +105,14 @@ class CoinbaseService {
 
       const tx = await walletProvider.sendTransaction({
         to: usdcAddress,
+        value: "0",
         data: new Interface([
           "function approve(address spender, uint256 amount)"
         ]).encodeFunctionData("approve", [this.config.treasuryAddress, approvalAmount]),
-        maxFeePerGas: "5000000000", // 5 gwei
-        maxPriorityFeePerGas: "2000000000", // 2 gwei
-        chain: {
-          id: 84532,
-          name: 'Base Sepolia',
-          network: 'base-sepolia',
-          nativeCurrency: {
-            name: 'Ether',
-            symbol: 'ETH',
-            decimals: 18
-          },
-          rpcUrls: {
-            default: { http: ['https://sepolia.base.org'] }
-          }
-        }
+        maxFeePerGas: "20000000000", // 20 gwei
+        maxPriorityFeePerGas: "5000000000", // 5 gwei
+        type: 2,
+        chainId: 84532
       });
 
       console.log("Approve transaction hash:", tx.hash);
