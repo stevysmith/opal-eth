@@ -40,6 +40,10 @@ class CoinbaseService {
 
   async initialize() {
     try {
+      if (this.agentKit) {
+        return; // Already initialized
+      }
+
       // First configure the wallet provider
       const walletProvider = await CdpWalletProvider.configureWithWallet({
         apiKeyName: this.config.apiKeyName,
@@ -70,6 +74,17 @@ class CoinbaseService {
       throw error;
     }
   }
+
+  private async ensureInitialized() {
+    if (!this.agentKit) {
+      await this.initialize();
+    }
+  }
+
+  async approveUsdc(): Promise<string> {
+    try {
+      await this.ensureInitialized();
+      const actions = this.agentKit.getActions();
 
   async hasUsdcApproval(): Promise<boolean> {
     try {
