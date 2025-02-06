@@ -64,7 +64,10 @@ class CoinbaseService {
             networkId: this.config.networkId,
             chainId: "0x14a33", // Base Sepolia chain ID
             provider: walletProvider,
-            contractAddress: this.USDC_CONTRACTS[this.config.networkId as keyof typeof this.USDC_CONTRACTS],
+            contractAddress:
+              this.USDC_CONTRACTS[
+                this.config.networkId as keyof typeof this.USDC_CONTRACTS
+              ],
             spender: this.config.treasuryAddress,
           }),
         ],
@@ -86,10 +89,18 @@ class CoinbaseService {
   async approveUsdc(): Promise<string> {
     try {
       await this.ensureInitialized();
+
       const actions = this.agentKit.getActions();
+      console.log(
+        "ERC20 actions available:",
+        actions.map((a) => a.name),
+      );
+
+      // Replace with correct name if it’s different:
       const approveAction = actions.find(
         (a) => a.name === "ERC20ActionProvider_approve",
       );
+
       if (!approveAction) {
         throw new Error("Approve action not found");
       }
@@ -98,6 +109,7 @@ class CoinbaseService {
         this.USDC_CONTRACTS[
           this.config.networkId as keyof typeof this.USDC_CONTRACTS
         ];
+
       const tx = await approveAction.invoke({
         contractAddress: usdcAddress,
         spender: this.config.treasuryAddress,
@@ -135,34 +147,6 @@ class CoinbaseService {
     } catch (error) {
       console.error("Error checking USDC approval:", error);
       return false;
-    }
-  }
-
-  async approveUsdc(): Promise<string> {
-    try {
-      const actions = this.agentKit.getActions();
-      const approveAction = actions.find(
-        (a) => a.name === "ERC20ActionProvider_approve",
-      );
-      if (!approveAction) {
-        throw new Error("Approve action not found");
-      }
-
-      const usdcAddress =
-        this.USDC_CONTRACTS[
-          this.config.networkId as keyof typeof this.USDC_CONTRACTS
-        ];
-      const tx = await approveAction.invoke({
-        contractAddress: usdcAddress,
-        spender: this.config.treasuryAddress,
-        amount:
-          "115792089237316195423570985008687907853269984665640564039457584007913129639935", // max uint256
-      });
-
-      return tx.hash;
-    } catch (error) {
-      console.error("Error approving USDC:", error);
-      throw error;
     }
   }
 
