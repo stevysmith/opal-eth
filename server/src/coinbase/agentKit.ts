@@ -85,6 +85,30 @@ class CoinbaseService {
     try {
       await this.ensureInitialized();
       const actions = this.agentKit.getActions();
+      const approveAction = actions.find(
+        (a) => a.name === "ERC20ActionProvider_approve",
+      );
+      if (!approveAction) {
+        throw new Error("Approve action not found");
+      }
+
+      const usdcAddress =
+        this.USDC_CONTRACTS[
+          this.config.networkId as keyof typeof this.USDC_CONTRACTS
+        ];
+      const tx = await approveAction.invoke({
+        contractAddress: usdcAddress,
+        spender: this.config.treasuryAddress,
+        amount:
+          "115792089237316195423570985008687907853269984665640564039457584007913129639935", // max uint256
+      });
+
+      return tx.hash;
+    } catch (error) {
+      console.error("Error approving USDC:", error);
+      throw error;
+    }
+  }
 
   async hasUsdcApproval(): Promise<boolean> {
     try {
