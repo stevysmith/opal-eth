@@ -32,6 +32,12 @@ class GiveawayPayoutService {
       // Parse prize amount (assuming prize is in format "X USDC")
       const amount = giveaway.prize.split(" ")[0];
 
+      // Check and set USDC approval if needed
+      const hasApproval = await coinbaseService.hasUsdcApproval();
+      if (!hasApproval) {
+        await coinbaseService.approveUsdc();
+      }
+
       // Send USDC to winner
       const txHash = await coinbaseService.sendUsdc(
         winnerEntry.walletAddress,
