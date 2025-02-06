@@ -8,7 +8,7 @@ import { db } from "@db";
 import { mpcWallets } from "@db/schema";
 import { eq } from "drizzle-orm";
 import { ethers } from "ethers";
-import { Interface } from "@ethersproject/abi";
+import { Interface } from "ethers";
 
 class CoinbaseService {
   private agentKit: AgentKit;
