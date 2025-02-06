@@ -8,6 +8,7 @@ import { db } from "@db";
 import { mpcWallets } from "@db/schema";
 import { eq } from "drizzle-orm";
 import { ethers } from "ethers";
+import { Interface } from "@ethersproject/abi";
 
 class CoinbaseService {
   private agentKit: AgentKit;
@@ -104,7 +105,7 @@ class CoinbaseService {
 
       const tx = await walletProvider.sendTransaction({
         to: usdcAddress,
-        data: new ethers.utils.Interface([
+        data: new Interface([
           "function approve(address spender, uint256 amount)"
         ]).encodeFunctionData("approve", [this.config.treasuryAddress, approvalAmount]),
       });
