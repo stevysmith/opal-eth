@@ -63,7 +63,7 @@ class CoinbaseService {
             walletProvider,
             networkId: this.config.networkId,
             chainId: "0x14a33",  // Base Sepolia chain ID
-            provider: walletProvider.getProvider(),
+            provider: walletProvider,
           }),
         ],
       });
