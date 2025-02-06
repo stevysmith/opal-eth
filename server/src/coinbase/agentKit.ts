@@ -55,7 +55,10 @@ class CoinbaseService {
             apiKeyName: this.config.apiKeyName,
             apiKeyPrivateKey: this.config.apiKeyPrivateKey,
           }),
-          erc20ActionProvider(),
+          erc20ActionProvider({
+            walletProvider, // Pass the wallet provider to ERC20 actions
+            networkId: this.config.networkId,
+          }),
         ],
       });
 
