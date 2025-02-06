@@ -146,13 +146,14 @@ class BotManager {
               // Add delay to respect rate limits
               await new Promise(resolve => setTimeout(resolve, 2000));
 
-              await bot.launch(launchConfig);
+              await bot.telegram.deleteWebhook();
+              await bot.startPolling();
             } catch (error) {
               if (error.response?.error_code === 429) {
                 const retryAfter = error.response.parameters.retry_after || 30;
                 console.log(`[Bot ${agentId}] Rate limited, waiting ${retryAfter}s before retry...`);
                 await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
-                await bot.launch(launchConfig);
+                await bot.startPolling();
               } else {
                 throw error;
               }
