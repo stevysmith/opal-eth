@@ -1,0 +1,131 @@
+Error approving USDC: EstimateGasExecutionError: Execution reverted for an unknown reason.
+
+Estimate Gas Arguments:
+  to:                    0x6Ac3aB54Dc5019A2e57eCcb214337FF5bbD52897
+  data:                  0x095ea7b3000000000000000000000000b12086da87aa0c12b458bb2765b83c8fd9da7651ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+  maxFeePerGas:          0.001000426 gwei
+  maxPriorityFeePerGas:  0.001 gwei
+
+Details: execution reverted
+Version: viem@2.22.17
+    at getEstimateGasError (/home/runner/workspace/node_modules/viem/utils/errors/getEstimateGasError.ts:42:10)
+    at estimateGas (/home/runner/workspace/node_modules/viem/actions/public/estimateGas.ts:234:30)
+    ... 4 lines matching cause stack trace ...
+    at async <anonymous> (/home/runner/workspace/server/auth.ts:140:7) {
+  cause: ExecutionRevertedError: Execution reverted for an unknown reason.
+  
+  Details: execution reverted
+  Version: viem@2.22.17
+      at getNodeError (/home/runner/workspace/node_modules/viem/utils/errors/getNodeError.ts:77:12)
+      at <anonymous> (/home/runner/workspace/node_modules/viem/utils/errors/getEstimateGasError.ts:35:31)
+      at getEstimateGasError (/home/runner/workspace/node_modules/viem/utils/errors/getEstimateGasError.ts:41:5)
+      at estimateGas (/home/runner/workspace/node_modules/viem/actions/public/estimateGas.ts:234:30)
+      at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+      at async CdpWalletProvider.prepareTransaction (/home/runner/workspace/node_modules/@coinbase/agentkit/dist/wallet-providers/cdpWalletProvider.js:171:21)
+      at async CdpWalletProvider.sendTransaction (/home/runner/workspace/node_modules/@coinbase/agentkit/dist/wallet-providers/cdpWalletProvider.js:146:37)
+      at async CoinbaseService.approveUsdc (/home/runner/workspace/server/src/coinbase/agentKit.ts:106:18)
+      at async <anonymous> (/home/runner/workspace/server/auth.ts:140:7) {
+    details: 'execution reverted',
+    docsPath: undefined,
+    metaMessages: undefined,
+    shortMessage: 'Execution reverted for an unknown reason.',
+    version: '2.22.17',
+    [cause]: RpcRequestError: RPC Request failed.
+    
+    URL: https://sepolia.base.org
+    Request body: {"method":"eth_estimateGas","params":[{"data":"0x095ea7b3000000000000000000000000b12086da87aa0c12b458bb2765b83c8fd9da7651ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","maxFeePerGas":"0xf43ea","maxPriorityFeePerGas":"0xf4240","to":"0x6Ac3aB54Dc5019A2e57eCcb214337FF5bbD52897"}]}
+    
+    Details: execution reverted
+    Version: viem@2.22.17
+        at request (/home/runner/workspace/node_modules/viem/clients/transports/http.ts:136:19)
+        at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+        at async delay.count.count (/home/runner/workspace/node_modules/viem/utils/buildRequest.ts:129:22)
+        at async attemptRetry (/home/runner/workspace/node_modules/viem/utils/promise/withRetry.ts:44:22) {
+      details: 'execution reverted',
+      docsPath: undefined,
+      metaMessages: [Array],
+      shortMessage: 'RPC Request failed.',
+      version: '2.22.17',
+      code: 3,
+      data: '0xe602df050000000000000000000000000000000000000000000000000000000000000000',
+      [cause]: [Object]
+    }
+  },
+  details: 'execution reverted',
+  docsPath: undefined,
+  metaMessages: [
+    'Estimate Gas Arguments:',
+    '  to:                    0x6Ac3aB54Dc5019A2e57eCcb214337FF5bbD52897\n' +
+      '  data:                  0x095ea7b3000000000000000000000000b12086da87aa0c12b458bb2765b83c8fd9da7651ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n' +
+      '  maxFeePerGas:          0.001000426 gwei\n' +
+      '  maxPriorityFeePerGas:  0.001 gwei'
+  ],
+  shortMessage: 'Execution reverted for an unknown reason.',
+  version: '2.22.17'
+}
+Failed to update profile: EstimateGasExecutionError: Execution reverted for an unknown reason.
+
+Estimate Gas Arguments:
+  to:                    0x6Ac3aB54Dc5019A2e57eCcb214337FF5bbD52897
+  data:                  0x095ea7b3000000000000000000000000b12086da87aa0c12b458bb2765b83c8fd9da7651ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+  maxFeePerGas:          0.001000426 gwei
+  maxPriorityFeePerGas:  0.001 gwei
+
+Details: execution reverted
+Version: viem@2.22.17
+    at getEstimateGasError (/home/runner/workspace/node_modules/viem/utils/errors/getEstimateGasError.ts:42:10)
+    at estimateGas (/home/runner/workspace/node_modules/viem/actions/public/estimateGas.ts:234:30)
+    ... 4 lines matching cause stack trace ...
+    at async <anonymous> (/home/runner/workspace/server/auth.ts:140:7) {
+  cause: ExecutionRevertedError: Execution reverted for an unknown reason.
+  
+  Details: execution reverted
+  Version: viem@2.22.17
+      at getNodeError (/home/runner/workspace/node_modules/viem/utils/errors/getNodeError.ts:77:12)
+      at <anonymous> (/home/runner/workspace/node_modules/viem/utils/errors/getEstimateGasError.ts:35:31)
+      at getEstimateGasError (/home/runner/workspace/node_modules/viem/utils/errors/getEstimateGasError.ts:41:5)
+      at estimateGas (/home/runner/workspace/node_modules/viem/actions/public/estimateGas.ts:234:30)
+      at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+      at async CdpWalletProvider.prepareTransaction (/home/runner/workspace/node_modules/@coinbase/agentkit/dist/wallet-providers/cdpWalletProvider.js:171:21)
+      at async CdpWalletProvider.sendTransaction (/home/runner/workspace/node_modules/@coinbase/agentkit/dist/wallet-providers/cdpWalletProvider.js:146:37)
+      at async CoinbaseService.approveUsdc (/home/runner/workspace/server/src/coinbase/agentKit.ts:106:18)
+      at async <anonymous> (/home/runner/workspace/server/auth.ts:140:7) {
+    details: 'execution reverted',
+    docsPath: undefined,
+    metaMessages: undefined,
+    shortMessage: 'Execution reverted for an unknown reason.',
+    version: '2.22.17',
+    [cause]: RpcRequestError: RPC Request failed.
+    
+    URL: https://sepolia.base.org
+    Request body: {"method":"eth_estimateGas","params":[{"data":"0x095ea7b3000000000000000000000000b12086da87aa0c12b458bb2765b83c8fd9da7651ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","maxFeePerGas":"0xf43ea","maxPriorityFeePerGas":"0xf4240","to":"0x6Ac3aB54Dc5019A2e57eCcb214337FF5bbD52897"}]}
+    
+    Details: execution reverted
+    Version: viem@2.22.17
+        at request (/home/runner/workspace/node_modules/viem/clients/transports/http.ts:136:19)
+        at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+        at async delay.count.count (/home/runner/workspace/node_modules/viem/utils/buildRequest.ts:129:22)
+        at async attemptRetry (/home/runner/workspace/node_modules/viem/utils/promise/withRetry.ts:44:22) {
+      details: 'execution reverted',
+      docsPath: undefined,
+      metaMessages: [Array],
+      shortMessage: 'RPC Request failed.',
+      version: '2.22.17',
+      code: 3,
+      data: '0xe602df050000000000000000000000000000000000000000000000000000000000000000',
+      [cause]: [Object]
+    }
+  },
+  details: 'execution reverted',
+  docsPath: undefined,
+  metaMessages: [
+    'Estimate Gas Arguments:',
+    '  to:                    0x6Ac3aB54Dc5019A2e57eCcb214337FF5bbD52897\n' +
+      '  data:                  0x095ea7b3000000000000000000000000b12086da87aa0c12b458bb2765b83c8fd9da7651ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n' +
+      '  maxFeePerGas:          0.001000426 gwei\n' +
+      '  maxPriorityFeePerGas:  0.001 gwei'
+  ],
+  shortMessage: 'Execution reverted for an unknown reason.',
+  version: '2.22.17'
+}
+11:19:58 PM [express] PATCH /api/user/profile 500 in 1693ms :: {"message":"Execution reverted for an …
