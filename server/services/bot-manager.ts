@@ -108,9 +108,6 @@ class BotManager {
         // Create the launch promise with simplified polling setup
         console.log(`[Bot ${agentId}] Creating launch promise...`);
         const launchPromise = new Promise<boolean>(async (resolve, reject) => {
-          let isLaunched = false;
-          let timeoutId: NodeJS.Timeout;
-
           // Setup commands before launch
           if (agent.template === "poll") {
             this.setupPollCommands(bot, agentId);
@@ -120,46 +117,12 @@ class BotManager {
             this.setupQACommands(bot, agentId);
           }
 
-          const cleanup = async () => {
-            clearTimeout(timeoutId);
-            if (!isLaunched) {
-              try {
-                await bot.telegram.close();
-                await bot.stop();
-              } catch (err) {
-                console.error(`[Bot ${agentId}] Error during cleanup:`, err);
-              }
-            }
-          };
-
           try {
-            timeoutId = setTimeout(async () => {
-              console.log(`[Bot ${agentId}] Timeout reached after 60 seconds`);
-              await cleanup();
-              reject(new Error("Bot initialization timed out after 60 seconds"));
-            }, 60000);
 
-            try {
-              // Send a test message to verify channel access
-              await bot.telegram.sendMessage(config.channelId, "🤖 Bot is initializing...");
-
-              // Add delay to respect rate limits
-              await new Promise(resolve => setTimeout(resolve, 2000));
-
-              await bot.telegram.deleteWebhook();
-              await bot.startPolling();
-            } catch (error) {
-              if (error.response?.error_code === 429) {
-                const retryAfter = error.response.parameters.retry_after || 30;
-                console.log(`[Bot ${agentId}] Rate limited, waiting ${retryAfter}s before retry...`);
-                await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
-                await bot.startPolling();
-              } else {
-                throw error;
-              }
-            }
-            isLaunched = true;
-            await cleanup();
+            // Send a test message to verify channel access
+            await bot.telegram.sendMessage(config.channelId, "🤖 Bot is initializing...");
+            await bot.telegram.deleteWebhook();
+            await bot.startPolling();
             console.log(`[Bot ${agentId}] Launch successful`);
             resolve(true);
           } catch (error) {
