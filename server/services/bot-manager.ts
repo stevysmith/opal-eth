@@ -5,6 +5,7 @@ import { agents, polls, votes, giveaways, giveawayEntries } from "@db/schema";
 import { eq } from "drizzle-orm";
 import fetch from "node-fetch";
 import schedule from "node-schedule";
+import { giveawayPayoutService } from '../src/services/giveawayPayoutService';
 
 class BotManager {
   private bots: Map<number, Telegraf<Context<Update>>> = new Map();
@@ -522,15 +523,14 @@ class BotManager {
                 return;
               }
 
-              const winner =
-                entries[Math.floor(Math.random() * entries.length)];
+              const winner = entries[Math.floor(Math.random() * entries.length)];
               try {
-                // Placeholder for giveawayPayoutService.processGiveawayWinner
-                //  This needs to be implemented separately.
-                const payoutResult = await Promise.resolve({
-                  amount: 10,
-                  txHash: "testHash",
-                });
+                // Process the USDC payout to winner
+                const payoutResult = await giveawayPayoutService.processGiveawayWinner(
+                  giveaway.id,
+                  winner.userId
+                );
+
                 await ctx.reply(
                   `🎉 Giveaway Ended!\n\n` +
                     `Prize: ${prize}\n` +
@@ -538,24 +538,27 @@ class BotManager {
                     `💰 USDC Payment Sent!\n` +
                     `Amount: ${payoutResult.amount} USDC\n` +
                     `Transaction: ${payoutResult.txHash}\n\n` +
-                    `Congratulations!`,
+                    `Congratulations! The USDC has been sent to your wallet.`
                 );
               } catch (error) {
                 console.error(
                   `[Bot ${agentId}] Error processing payout:`,
-                  error,
+                  error
                 );
+
+                // Still update the winner in database even if payout fails
                 await db
                   .update(giveaways)
                   .set({ winnerId: winner.userId })
                   .where(eq(giveaways.id, giveaway.id));
 
+                const errorMessage = error instanceof Error ? error.message : "Unknown error";
                 await ctx.reply(
                   `🎉 Giveaway Ended!\n\n` +
                     `Prize: ${prize}\n` +
                     `Winner: @${winner.userId}\n` +
-                    `⚠️ Note: ${error instanceof Error ? error.message : "Unknown error"}\n\n` +
-                    `Congratulations to the winner! Our team will handle the payout manually.`,
+                    `⚠️ Payout Status: ${errorMessage}\n\n` +
+                    `Don't worry! Our team will process your payout manually. Please ensure your wallet address is correctly set up.`
                 );
               }
             } catch (error) {
