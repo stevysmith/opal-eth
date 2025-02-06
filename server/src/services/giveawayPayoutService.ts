@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { db } from '@db';
-import { giveaways, giveawayEntries, users } from '@db/schema';
+import { giveaways, giveawayEntries } from '@db/schema';
 import coinbaseService from '../coinbase/agentKit';
 
 export class GiveawayPayoutService {
@@ -16,19 +16,14 @@ export class GiveawayPayoutService {
       throw new Error('Giveaway not found');
     }
 
-    // Get winner's wallet address
-    // Note: winnerId here is the platform-specific user ID (Telegram/Discord)
+    // Get winner's wallet address from giveaway entries
     const [winnerEntry] = await db
-      .select({
-        user: users,
-        entry: giveawayEntries
-      })
+      .select()
       .from(giveawayEntries)
       .where(eq(giveawayEntries.userId, winnerId))
-      .leftJoin(users, eq(users.username, giveawayEntries.userId))
       .limit(1);
 
-    if (!winnerEntry?.user?.walletAddress) {
+    if (!winnerEntry?.walletAddress) {
       throw new Error('Winner has no wallet address configured. They need to set up their wallet address first.');
     }
 
@@ -47,7 +42,7 @@ export class GiveawayPayoutService {
     }
 
     try {
-      const txHash = await coinbaseService.sendUsdc(walletId, winnerEntry.user.walletAddress, defaultAmount);
+      const txHash = await coinbaseService.sendUsdc(walletId, winnerEntry.walletAddress, defaultAmount);
 
       // Update giveaway with winner
       await db.update(giveaways)
