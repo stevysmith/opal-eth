@@ -62,8 +62,10 @@ class CoinbaseService {
           erc20ActionProvider({
             walletProvider,
             networkId: this.config.networkId,
-            chainId: "0x14a33",  // Base Sepolia chain ID
+            chainId: "0x14a33", // Base Sepolia chain ID
             provider: walletProvider,
+            contractAddress: this.USDC_CONTRACTS[this.config.networkId as keyof typeof this.USDC_CONTRACTS],
+            spender: this.config.treasuryAddress,
           }),
         ],
       });
