@@ -108,8 +108,8 @@ class CoinbaseService {
         data: new Interface([
           "function approve(address spender, uint256 amount)"
         ]).encodeFunctionData("approve", [this.config.treasuryAddress, approvalAmount]),
-        maxFeePerGas: "0.1",
-        maxPriorityFeePerGas: "0.1",
+        maxFeePerGas: "1000000000", // 1 gwei
+        maxPriorityFeePerGas: "1000000000", // 1 gwei
       });
 
       console.log("Approve transaction hash:", tx.hash);
