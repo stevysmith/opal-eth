@@ -567,6 +567,49 @@ class BotManager {
       return handleGiveawayCommand(ctx);
     });
 
+    const handleEnterCommand = async (ctx: Context) => {
+      try {
+        const text = ctx.message?.text || "";
+        const [, giveawayId, walletAddress] = text.split(" ");
+
+        if (!giveawayId || !walletAddress) {
+          return ctx.reply("Please provide both giveaway ID and wallet address.\nFormat: /enter <giveaway_id> <wallet_address>");
+        }
+
+        const [giveaway] = await db
+          .select()
+          .from(giveaways)
+          .where(eq(giveaways.id, parseInt(giveawayId)))
+          .limit(1);
+
+        if (!giveaway) {
+          return ctx.reply("Giveaway not found");
+        }
+
+        if (new Date() > giveaway.endTime) {
+          return ctx.reply("This giveaway has ended");
+        }
+
+        const userId = ctx.from?.id?.toString();
+        if (!userId) {
+          return ctx.reply("Could not identify participant");
+        }
+
+        await db.insert(giveawayEntries).values({
+          giveawayId: giveaway.id,
+          userId,
+          walletAddress,
+        });
+
+        ctx.reply("You've been entered into the giveaway! Good luck! 🍀");
+      } catch (error) {
+        console.error("Error recording giveaway entry:", error);
+        ctx.reply("Failed to enter giveaway. Please try again.");
+      }
+    };
+
+    bot.command("enter", handleEnterCommand);
+
     bot.on("channel_post", (ctx, next) => {
       if (ctx.channelPost?.text?.startsWith("/giveaway")) {
         console.log(`[Bot ${agentId}] Channel post giveaway command matched`);

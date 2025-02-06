@@ -85,7 +85,7 @@ export const giveawayEntries = pgTable("giveaway_entries", {
   id: serial("id").primaryKey(),
   giveawayId: integer("giveaway_id").notNull().references(() => giveaways.id),
   userId: text("user_id").notNull(), // Telegram/Discord user ID
-  walletAddress: text("wallet_address").notNull(), // Added wallet address field
+  walletAddress: text("wallet_address").notNull(),
   createdAt: timestamp("created_at").notNull().default(new Date()),
 });
 
