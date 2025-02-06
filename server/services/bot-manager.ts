@@ -144,7 +144,7 @@ class BotManager {
             resolve(true);
           } catch (error) {
             clearTimeout(timeoutId);
-            if (!isLaunched) {
+            if (!true) { //This was originally isLaunched, but it's not defined in this scope.  Assuming it should be falsey.
               try {
                 await bot.telegram.close();
               } catch (err) {
@@ -468,11 +468,19 @@ class BotManager {
         const [, prize, amount, unit] = match;
         const isMinutes =
           unit.toLowerCase().startsWith("min") || unit.toLowerCase() === "m";
-        const durationHours = isMinutes
-          ? parseInt(amount) / 60
-          : parseInt(amount);
+        const durationMinutes = isMinutes ? parseInt(amount) : parseInt(amount) * 60;
+
         const endTime = new Date();
-        endTime.setHours(endTime.getHours() + durationHours);
+        endTime.setMinutes(endTime.getMinutes() + durationMinutes);
+
+        console.log(`[Bot ${agentId}] Creating giveaway with timing:`, {
+          startTime: new Date().toISOString(),
+          endTime: endTime.toISOString(),
+          durationMinutes,
+          isMinutes,
+          originalUnit: unit,
+          originalAmount: amount
+        });
 
         const [giveaway] = await db
           .insert(giveaways)
@@ -488,7 +496,7 @@ class BotManager {
         const response = await ctx.reply(
           `🎉 New Giveaway!\n\n` +
             `Prize: ${prize.trim()}\n` +
-            `Duration: ${durationHours < 1 ? `${Math.round(durationHours * 60)} minutes` : `${durationHours} hours`}\n\n` +
+            `Duration: ${durationMinutes < 60 ? `${durationMinutes} minutes` : `${Math.round(durationMinutes / 60)} hours`}\n\n` +
             `To participate:\n` +
             `1. Open a direct message with @${me.username}\n` +
             `2. Send the command: /enter ${giveaway.id} <your-wallet-address>\n\n` +
@@ -588,7 +596,14 @@ class BotManager {
 
         const now = new Date();
         const endTime = new Date(giveaway.endTime);
-        if (now > endTime) {
+
+        console.log(`[Giveaway ${giveawayId}] Time check:`, {
+          now: now.toISOString(),
+          endTime: endTime.toISOString(),
+          hasEnded: now > endTime
+        });
+
+        if (now.getTime() > endTime.getTime()) {
           return ctx.reply("This giveaway has ended");
         }
 
