@@ -1,72 +1,79 @@
-import { eq } from 'drizzle-orm';
-import { db } from '@db';
-import { giveaways, giveawayEntries } from '@db/schema';
-import coinbaseService from '../coinbase/agentKit';
+import { db } from "@db";
+import { giveaways, giveawayEntries } from "@db/schema";
+import { eq } from "drizzle-orm";
+import coinbaseService from "../coinbase/agentKit";
 
-export class GiveawayPayoutService {
+class GiveawayPayoutService {
   async processGiveawayWinner(giveawayId: number, winnerId: string) {
-    // Get giveaway details
-    const [giveaway] = await db
-      .select()
-      .from(giveaways)
-      .where(eq(giveaways.id, giveawayId))
-      .limit(1);
-
-    if (!giveaway) {
-      throw new Error('Giveaway not found');
-    }
-
-    // Get winner's wallet address from giveaway entries
-    const [winnerEntry] = await db
-      .select()
-      .from(giveawayEntries)
-      .where(eq(giveawayEntries.userId, winnerId))
-      .limit(1);
-
-    if (!winnerEntry?.walletAddress) {
-      throw new Error('Winner has no wallet address configured. They need to set up their wallet address first.');
-    }
-
-    // Get or create MPC wallet for the agent
-    let walletId = await coinbaseService.getWalletForAgent(giveaway.agentId);
-    if (!walletId) {
-      walletId = await coinbaseService.createMpcWallet(giveaway.agentId);
-    }
-
-    // Verify agent has sufficient balance
-    const balance = await coinbaseService.getWalletBalance(walletId);
-    const defaultAmount = '10'; // Default 10 USDC for testing
-
-    if (parseFloat(balance) < parseFloat(defaultAmount)) {
-      throw new Error(`Insufficient USDC balance. Available: ${balance} USDC, Required: ${defaultAmount} USDC`);
-    }
-
     try {
-      const txHash = await coinbaseService.sendUsdc(walletId, winnerEntry.walletAddress, defaultAmount);
+      // Get giveaway details
+      const [giveaway] = await db
+        .select()
+        .from(giveaways)
+        .where(eq(giveaways.id, giveawayId))
+        .limit(1);
+
+      if (!giveaway) {
+        throw new Error("Giveaway not found");
+      }
+
+      // Get winner's wallet address
+      const [winnerEntry] = await db
+        .select()
+        .from(giveawayEntries)
+        .where(eq(giveawayEntries.giveawayId, giveawayId))
+        .where(eq(giveawayEntries.userId, winnerId))
+        .limit(1);
+
+      if (!winnerEntry?.walletAddress) {
+        throw new Error("Winner wallet address not found");
+      }
+
+      // Get or create agent wallet
+      let agentWalletAddress = await coinbaseService.getWalletForAgent(
+        giveaway.agentId,
+      );
+
+      if (!agentWalletAddress) {
+        agentWalletAddress = await coinbaseService.createMpcWallet(
+          giveaway.agentId,
+        );
+      }
+
+      // Parse prize amount (assuming prize is in format "X USDC")
+      const amount = giveaway.prize.split(" ")[0];
+
+      // Check wallet balance
+      const balance =
+        await coinbaseService.getWalletBalance(agentWalletAddress);
+      if (parseFloat(balance) < parseFloat(amount)) {
+        throw new Error(
+          `Insufficient balance. Required: ${amount} USDC, Available: ${balance} USDC`,
+        );
+      }
+
+      // Send USDC to winner
+      const txHash = await coinbaseService.sendUsdc(
+        agentWalletAddress,
+        winnerEntry.walletAddress,
+        amount,
+      );
 
       // Update giveaway with winner
-      await db.update(giveaways)
+      await db
+        .update(giveaways)
         .set({ winnerId })
         .where(eq(giveaways.id, giveawayId));
 
       return {
-        success: true,
+        amount,
         txHash,
-        amount: defaultAmount,
-        winner: winnerId,
+        winnerAddress: winnerEntry.walletAddress,
       };
     } catch (error) {
-      console.error('Failed to process payout:', error);
-      throw new Error('Failed to process USDC payout. Please check agent wallet balance and configuration.');
+      console.error("Error processing giveaway winner:", error);
+      throw error;
     }
-  }
-
-  async getGiveawayBalance(agentId: number): Promise<string> {
-    let walletId = await coinbaseService.getWalletForAgent(agentId);
-    if (!walletId) {
-      walletId = await coinbaseService.createMpcWallet(agentId);
-    }
-    return coinbaseService.getWalletBalance(walletId);
   }
 }
 

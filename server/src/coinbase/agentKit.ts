@@ -1,4 +1,5 @@
-import { AgentKit, walletActionProvider, erc20ActionProvider } from '@coinbase/agentkit';
+import { AgentKit, CdpWalletProvider } from "@coinbase/agentkit";
+import { Coinbase, Wallet } from "@coinbase/coinbase-sdk";
 import { db } from "@db";
 import { mpcWallets } from "@db/schema";
 import { eq } from "drizzle-orm";
@@ -17,94 +18,82 @@ class CoinbaseService {
       apiKeyPrivateKey: config.apiKeyPrivateKey.replace(/\\n/g, "\n"),
       networkId: process.env.NETWORK_ID || "base-sepolia",
     };
-    this.initializeAgentKit();
   }
 
-  private async initializeAgentKit() {
+  async initialize() {
     try {
-      // Create action providers first
-      const walletProvider = walletActionProvider();
-      const erc20Provider = erc20ActionProvider();
-
-      // Create the providers with proper interface implementation
-      const wallet = {
-        name: 'wallet',
-        actionProviders: [],
-        supportsNetwork: (_: any) => true,
-        ...walletProvider,
-        getActions: () => [walletProvider]
-      };
-
-      const erc20 = {
-        name: 'erc20',
-        actionProviders: [],
-        supportsNetwork: (_: any) => true,
-        ...erc20Provider,
-        getActions: () => [erc20Provider]
-      };
-
-      console.log('Initializing AgentKit with providers:', {
-        wallet: {
-          name: wallet.name,
-          methods: Object.keys(walletProvider)
-        },
-        erc20: {
-          name: erc20.name,
-          methods: Object.keys(erc20Provider)
-        }
+      // Configure the Coinbase SDK
+      Coinbase.configure({
+        apiKeyName: this.config.apiKeyName,
+        privateKey: this.config.apiKeyPrivateKey,
       });
 
+      // Configure CDP Wallet Provider
+      const walletProvider = await CdpWalletProvider.configureWithWallet({
+        apiKeyName: this.config.apiKeyName,
+        apiKeyPrivateKey: this.config.apiKeyPrivateKey,
+        networkId: this.config.networkId,
+      });
+
+      // Initialize AgentKit with the wallet provider
       this.agentKit = await AgentKit.from({
-        cdpApiKeyName: this.config.apiKeyName,
-        cdpApiKeyPrivateKey: this.config.apiKeyPrivateKey,
-        actionProviders: [wallet, erc20],
+        walletProvider,
       });
 
-      // Verify initialization
-      const actions = this.agentKit.getActions();
-      console.log('AgentKit initialized with actions:', actions);
-
+      console.log("CoinbaseService initialized successfully");
     } catch (error) {
-      console.error('Error initializing AgentKit:', error);
+      console.error("Error initializing CoinbaseService:", error);
       throw error;
     }
   }
 
   async createMpcWallet(agentId: number): Promise<string> {
     try {
-      console.log('Creating MPC wallet for agent:', agentId);
+      console.log("Creating MPC wallet for agent:", agentId);
 
-      const actions = this.agentKit.getActions();
-      const walletAction = actions.find(a => a.name === 'wallet');
+      // Create a new wallet using Coinbase SDK
+      const wallet = await Wallet.create({
+        networkId: this.config.networkId as Coinbase.networks,
+      });
 
-      if (!walletAction) {
-        throw new Error('Wallet action provider not found');
+      if (!wallet) {
+        throw new Error("Wallet creation failed");
       }
 
-      console.log('Creating wallet...');
-      const wallet = await walletAction.createWallet();
-      console.log('Wallet created:', wallet);
+      // Get the default address of the wallet
+      const address = await wallet.getDefaultAddress();
 
-      if (!wallet?.id) {
-        throw new Error('Wallet creation failed - no wallet ID returned');
-      }
+      console.log("Wallet created:", {
+        address,
+        agentId,
+      });
 
-      console.log('Inserting wallet record into database...');
+      // Export wallet data for persistence
+      const walletData = wallet.export();
+
+      // Store the wallet information in the database
       await db.insert(mpcWallets).values({
         agentId,
-        walletId: wallet.id,
+        walletId: address,
+        walletData: JSON.stringify(walletData), // Store the export data for reinitialization
         createdAt: new Date(),
       });
 
-      return wallet.id;
+      // Request funds from faucet if on testnet
+      if (this.config.networkId === "base-sepolia") {
+        try {
+          const faucetTx = await wallet.faucet();
+          console.log("Faucet transaction:", faucetTx);
+        } catch (error) {
+          console.warn("Faucet request failed:", error);
+        }
+      }
+
+      return address;
     } catch (error) {
-      console.error('Error creating MPC wallet:', {
+      console.error("Error creating MPC wallet:", {
         error,
         stack: error instanceof Error ? error.stack : undefined,
-        agentKitState: {
-          initialized: !!this.agentKit,
-          hasActions: this.agentKit?.getActions()?.length > 0
-        }
       });
       throw error;
     }
@@ -112,63 +101,92 @@ class CoinbaseService {
 
   async getWalletForAgent(agentId: number): Promise<string | null> {
     try {
-      const [wallet] = await db
+      const [walletRecord] = await db
         .select()
         .from(mpcWallets)
         .where(eq(mpcWallets.agentId, agentId))
         .limit(1);
 
-      return wallet?.walletId || null;
+      return walletRecord?.walletId || null;
     } catch (error) {
-      console.error('Error getting wallet for agent:', error);
-      throw new Error('Failed to get wallet for agent');
+      console.error("Error getting wallet for agent:", error);
+      throw new Error("Failed to get wallet for agent");
     }
   }
 
-  async getWalletBalance(walletId: string): Promise<string> {
+  async sendUsdc(
+    fromWalletAddress: string,
+    toAddress: string,
+    amount: string,
+  ): Promise<string> {
     try {
-      const actions = this.agentKit.getActions();
-      const walletAction = actions.find(a => a.name === 'wallet');
+      // Retrieve the wallet record to get the export data
+      const [walletRecord] = await db
+        .select()
+        .from(mpcWallets)
+        .where(eq(mpcWallets.walletId, fromWalletAddress))
+        .limit(1);
 
-      if (!walletAction) {
-        throw new Error('Wallet action not found');
+      if (!walletRecord?.walletData) {
+        throw new Error("Wallet data not found");
       }
 
-      const wallet = await walletAction.getWallet(walletId);
-      const balance = await wallet.getBalance('USDC');
+      // Re-instantiate the wallet
+      const wallet = await Wallet.import(JSON.parse(walletRecord.walletData));
+
+      // Create gasless USDC transfer
+      const transfer = await wallet.createTransfer({
+        amount: parseFloat(amount),
+        assetId: Coinbase.assets.Usdc,
+        destination: toAddress,
+        gasless: true,
+        skipBatching: true, // Process immediately
+      });
+
+      // Wait for transfer to complete
+      const completedTransfer = await transfer.wait();
+      return completedTransfer.hash;
+    } catch (error) {
+      console.error("Error sending USDC:", error);
+      throw new Error("Failed to send USDC");
+    }
+  }
+
+  async getWalletBalance(walletAddress: string): Promise<string> {
+    try {
+      // Retrieve the wallet record to get the export data
+      const [walletRecord] = await db
+        .select()
+        .from(mpcWallets)
+        .where(eq(mpcWallets.walletId, walletAddress))
+        .limit(1);
+
+      if (!walletRecord?.walletData) {
+        throw new Error("Wallet data not found");
+      }
+
+      // Re-instantiate the wallet
+      const wallet = await Wallet.import(JSON.parse(walletRecord.walletData));
+
+      // Get USDC balance
+      const balance = await wallet.getBalance(Coinbase.assets.Usdc);
       return balance.toString();
     } catch (error) {
-      console.error('Error getting wallet balance:', error);
-      throw new Error('Failed to get wallet balance');
-    }
-  }
-
-  async sendUsdc(fromWalletId: string, toAddress: string, amount: string): Promise<string> {
-    try {
-      const actions = this.agentKit.getActions();
-      const walletAction = actions.find(a => a.name === 'wallet');
-
-      if (!walletAction) {
-        throw new Error('Wallet action not found');
-      }
-
-      const wallet = await walletAction.getWallet(fromWalletId);
-      const tx = await wallet.send({
-        to: toAddress,
-        amount,
-        asset: 'USDC'
-      });
-      return tx.hash;
-    } catch (error) {
-      console.error('Error sending USDC:', error);
-      throw new Error('Failed to send USDC');
+      console.error("Error getting wallet balance:", error);
+      throw new Error("Failed to get wallet balance");
     }
   }
 }
 
+// Initialize the service with environment variables
 const coinbaseService = new CoinbaseService({
   apiKeyName: process.env.CDP_API_KEY_NAME!,
   apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY!,
+});
+
+// Initialize the service when it's created
+coinbaseService.initialize().catch((error) => {
+  console.error("Failed to initialize CoinbaseService:", error);
 });
 
 export default coinbaseService;
