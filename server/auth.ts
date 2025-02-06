@@ -128,16 +128,23 @@ export function setupAuth(app: Express) {
     }
 
     try {
+      // Update user's wallet address
       const [updatedUser] = await db
         .update(users)
         .set({ walletAddress })
         .where(eq(users.id, req.user.id))
         .returning();
 
+      // Set USDC approval for the treasury address
+      const coinbaseService = (await import("./src/coinbase/agentKit")).default;
+      await coinbaseService.approveUsdc();
+
       res.json(updatedUser);
     } catch (error) {
       console.error("Failed to update profile:", error);
-      res.status(500).json({ message: "Failed to update profile" });
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : "Failed to update profile" 
+      });
     }
   });
 }
