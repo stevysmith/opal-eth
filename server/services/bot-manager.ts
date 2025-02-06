@@ -586,7 +586,9 @@ class BotManager {
           return ctx.reply("Giveaway not found");
         }
 
-        if (new Date() > giveaway.endTime) {
+        const now = new Date();
+        const endTime = new Date(giveaway.endTime);
+        if (now > endTime) {
           return ctx.reply("This giveaway has ended");
         }
 
