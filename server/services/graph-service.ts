@@ -58,11 +58,11 @@ export class GraphService {
           {
             role: "system",
             content:
-              "You are a DeFi analytics expert that creates concise, informative updates about Uniswap pool activity. Format the response to be easily readable in a Telegram message with emojis and bullet points. Include insights about changes and trends when possible.",
+              "You are a DeFi analytics expert that creates concise, informative updates about Uniswap pool activity. Format your response as a JSON object with a 'message' field containing the formatted message. Include emojis and bullet points in your message.",
           },
           {
             role: "user",
-            content: `Analyze and summarize the following DeFi data in a clear, informative way that highlights key metrics and notable changes. Data: ${JSON.stringify(data, null, 2)}`,
+            content: `Please analyze this DeFi data and return a JSON formatted response with key metrics and changes: ${JSON.stringify(data, null, 2)}`,
           },
         ],
         response_format: { type: "json_object" },
