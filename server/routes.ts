@@ -409,6 +409,47 @@ export function registerRoutes(app: Express): Server {
   });
 
 
+  // Add new endpoint to trigger immediate analytics update
+  app.post("/api/agents/:id/trigger-update", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.sendStatus(401);
+    }
+
+    try {
+      const agentId = parseInt(req.params.id);
+      const [agent] = await db
+        .select()
+        .from(agents)
+        .where(and(
+          eq(agents.id, agentId),
+          eq(agents.userId, req.user.id)
+        ))
+        .limit(1);
+
+      if (!agent) {
+        return res.status(404).json({ error: "Agent not found" });
+      }
+
+      if (agent.template !== "graph_notify") {
+        return res.status(400).json({ error: "Only graph_notify agents support manual updates" });
+      }
+
+      // Trigger analytics update via bot manager
+      const success = await botManager.sendAnalyticsUpdate(agentId);
+      if (!success) {
+        throw new Error("Failed to send analytics update");
+      }
+
+      res.json({ message: "Update triggered successfully" });
+    } catch (error) {
+      console.error("Error triggering update:", error);
+      res.status(500).json({ 
+        error: "Failed to trigger update",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
   // Clean up bots when server shuts down
   process.on('SIGTERM', async () => {
     await botManager.stopAll();

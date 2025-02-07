@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, MessageSquare, Award, BarChart3, Wallet } from "lucide-react";
+import { Loader2, MessageSquare, Award, BarChart3, LineChart, Send } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
@@ -40,7 +40,7 @@ interface EnrichedAgent {
   id: number;
   userId: number;
   name: string;
-  template: "poll" | "qa" | "giveaway";
+  template: "poll" | "qa" | "giveaway" | "graph_notify";
   persona: {
     description: string;
     tone: string;
@@ -206,7 +206,7 @@ function WalletBalance({ agentId }: { agentId: number }) {
   });
 
   const checkBalance = () => {
-    refetch().catch(error => {
+    refetch().catch((error) => {
       toast({
         title: "Error checking balance",
         description: error.message,
@@ -223,7 +223,7 @@ function WalletBalance({ agentId }: { agentId: number }) {
           {isLoading ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
-            <span className="font-medium">{balance ? `${balance} USDC` : '-- USDC'}</span>
+            <span className="font-medium">{balance ? `${balance} USDC` : "-- USDC"}</span>
           )}
           <Button
             variant="outline"
@@ -247,8 +247,34 @@ interface AgentDetailsPageProps {
 export default function AgentDetailsPage({ id }: AgentDetailsPageProps) {
   const agentId = parseInt(id);
   const { user } = useAuth();
+  const { toast } = useToast();
 
-  console.log("AgentDetailsPage: Initialized with agentId:", agentId);
+  // Add trigger update mutation
+  const triggerUpdateMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest(
+        "POST",
+        `/api/agents/${agentId}/trigger-update`
+      );
+      if (!response.ok) {
+        throw new Error("Failed to trigger update");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Update Triggered",
+        description: "Analytics update has been sent to your Telegram channel",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   const { data: agent, isLoading, error } = useQuery<EnrichedAgent>({
     queryKey: [`/api/agents/${agentId}`],
@@ -258,15 +284,8 @@ export default function AgentDetailsPage({ id }: AgentDetailsPageProps) {
     refetchInterval: 10000,
     queryFn: async () => {
       if (isNaN(agentId)) throw new Error("Invalid agent ID");
-
-      console.log("AgentDetailsPage: Fetching data for agent:", agentId);
       const response = await apiRequest("GET", `/api/agents/${agentId}`);
-      console.log("AgentDetailsPage: Received response:", response.status);
-
-      const data = await response.json();
-      console.log("AgentDetailsPage: Parsed data:", data);
-
-      return data;
+      return response.json();
     },
   });
 
@@ -302,6 +321,7 @@ export default function AgentDetailsPage({ id }: AgentDetailsPageProps) {
               {agent.template === "poll" && <BarChart3 className="w-4 h-4" />}
               {agent.template === "giveaway" && <Award className="w-4 h-4" />}
               {agent.template === "qa" && <MessageSquare className="w-4 h-4" />}
+              {agent.template === "graph_notify" && <LineChart className="w-4 h-4" />}
               {agent.template}
             </div>
           </div>
@@ -322,14 +342,26 @@ export default function AgentDetailsPage({ id }: AgentDetailsPageProps) {
                 {agent.platform} - Channel: {agent.platformConfig.channelId}
               </p>
             </div>
-            <div>
-              <h3 className="font-semibold mb-2">Persona</h3>
-              <p className="text-sm text-muted-foreground">
-                {agent.persona.description}
-                <br />
-                Tone: {agent.persona.tone}
-              </p>
-            </div>
+            {agent.template === "graph_notify" && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold">Analytics Updates</h3>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => triggerUpdateMutation.mutate()}
+                    disabled={triggerUpdateMutation.isPending}
+                  >
+                    {triggerUpdateMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <Send className="h-4 w-4 mr-2" />
+                    )}
+                    Test Update
+                  </Button>
+                </div>
+              </div>
+            )}
             {agent.template === "giveaway" && (
               <div className="space-y-4">
                 {user?.walletAddress ? (
