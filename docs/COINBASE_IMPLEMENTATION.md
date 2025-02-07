@@ -1,3 +1,15 @@
+class GiveawayPayoutService {
+  async processGiveawayWinner(giveawayId: number, winnerId: string) {
+    // Automates winner selection and USDC transfer
+  }
+}
+```
+- Automated USDC prize distribution
+- Winner selection automation
+- Transaction verification
+
+### 2. Wallet Management
+```typescript
 class CoinbaseService {
   private agentKit: AgentKit;
 
@@ -15,31 +27,50 @@ class CoinbaseService {
   async sendUsdc(toAddress: string, amount: string) { /* Sends USDC */ }
 }
 ```
+- Secure treasury management
+- USDC balance tracking
+- Automated transfers
 
-### 2. Giveaway Payout Service (server/src/services/giveawayPayoutService.ts)
-Handles automated USDC distributions for giveaway winners.
-
-```typescript
-class GiveawayPayoutService {
-  async processGiveawayWinner(giveawayId: number, winnerId: string) {
-    // Automates winner selection and USDC transfer
-  }
-}
-```
-
-## Integration Points
-
-### 1. Social Bot Integration
-The project integrates AgentKit with Telegram bots for:
+### 3. Social Integration
+- Telegram bot commands for USDC operations
 - Automated giveaway management
-- DeFi analytics queries
-- USDC prize distribution
+- Balance checking commands
 
-### 2. CDP Tools Integration
-We utilize multiple CDP tools:
+## Implementation Details
+
+### Core Files
+- `server/services/coinbase/agentKit.ts`: Main AgentKit integration
+- `server/src/services/giveawayPayoutService.ts`: USDC distribution
+- `server/services/bot-manager.ts`: Social commands
+
+### Security Features
+- Secure private key handling
+- Environment variable configuration
+- Transaction verification
+- Balance validation
+
+## Technical Value
+
+1. **User Experience**
+   - Simple chat interface for crypto operations
+   - Automated prize distribution
+   - Real-time balance updates
+
+2. **Integration Points**
+   - AgentKit wallet operations
+   - USDC token integration
+   - Social platform automation
+
+3. **Architecture**
+   - Modular design
+   - Comprehensive error handling
+   - Automatic retries
+   - Event-driven architecture
+
+## CDP Tools Integration
 - AgentKit for wallet operations
-- Base Sepolia testnet for transactions
-- USDC for giveaway prizes
+- Base Sepolia testnet integration
+- USDC token standard
 
 ## Innovative Features & Patterns
 
@@ -62,7 +93,7 @@ const handleGiveawayCommand = async (ctx: Context) => {
     giveaway.id,
     winner.userId
   );
-}
+};
 ```
 
 ### 2. Reusable AgentKit Patterns
@@ -115,7 +146,6 @@ async sendUsdc(toAddress: string, amount: string): Promise<string> {
 ```
 
 ### 3. Error Handling Patterns
-
 ```typescript
 // Comprehensive error handling for AgentKit operations
 class AgentKitError extends Error {

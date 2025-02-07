@@ -1,10 +1,10 @@
 async generateGraphQuery(userQuestion: string): Promise<string>
 ```
-- Converts natural language questions into optimized GraphQL queries
-- Supports complex analytics queries with multiple parameters
-- Intelligent query validation and error handling
+- Converts natural language to GraphQL queries
+- Supports complex analytics queries
+- Intelligent query validation
 
-2. **Real-time Analytics**
+### 2. Real-time Analytics
 ```typescript
 async getPoolStats(poolAddress: string)
 async getGlobalStats()
@@ -14,13 +14,34 @@ async getTopPools(limit: number = 5)
 - Global protocol statistics
 - Configurable top pools tracking
 
-3. **AI-Enhanced Formatting**
+### 3. AI-Enhanced Formatting
 ```typescript
 async formatPoolStats(data: any)
 ```
 - Converts raw Graph data into human-readable insights
-- Adds relevant context and explanations
-- Optimized for social platform delivery
+- Contextual explanations
+- Social platform optimized formatting
+
+## Implementation Details
+
+### Core Files
+- `server/services/graph-service.ts`: Main Graph integration
+- `server/services/bot-manager.ts`: Social platform delivery
+- `server/services/scheduler-service.ts`: Automated updates
+
+### Query Types
+1. Pool Statistics
+   - Volume tracking
+   - Liquidity analysis
+   - Fee metrics
+   - Price movements
+
+2. Global Metrics
+   - Total value locked
+   - Protocol-wide volume
+   - Transaction counts
+   - Active pools
+
 
 ## Data Flow
 1. User configures analytics preferences through the UI
@@ -28,20 +49,6 @@ async formatPoolStats(data: any)
 3. Real-time data is fetched from The Graph
 4. AI processes and formats the data 
 5. Formatted insights are delivered through social platforms
-
-## Impact on DeFi Ecosystem
-
-1. **Accessibility**
-   - Makes complex DeFi data accessible to non-technical users
-   - Delivers insights directly through familiar social platforms
-
-2. **Real-time Monitoring**
-   - Automated alerts for significant market movements
-   - Customizable notifications for specific pools or metrics
-
-3. **Community Engagement**
-   - Facilitates data-driven discussions in community channels
-   - Helps users make informed decisions based on on-chain data
 
 ## Project Sustainability
 
@@ -63,26 +70,23 @@ async formatPoolStats(data: any)
    - Active community engagement
    - Regular feature updates
 
-## Technical Details
 
-### Query Types
-1. **Pool Statistics**
-   - Volume tracking
-   - Liquidity analysis
-   - Fee collection metrics
-   - Price movements
+## Technical Value
 
-2. **Global Metrics**
-   - Total value locked
-   - Protocol-wide volume
-   - Transaction counts
-   - Active pools
+1. **Data Accessibility**
+   - Makes complex DeFi data accessible to non-technical users
+   - Real-time insights through social platforms
 
-3. **Custom Analytics**
-   - User-defined metrics
-   - Custom time ranges
-   - Comparative analysis
-   - Trend detection
+2. **Automation**
+   - Automated market movement alerts
+   - Customizable pool notifications
+   - Scheduled analytics updates
+
+3. **Architecture**
+   - Clean separation of concerns
+   - Comprehensive error handling
+   - Automatic query retries
+   - Social platform agnostic design
 
 ## Source Code Structure
 ```
