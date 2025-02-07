@@ -653,27 +653,60 @@ class BotManager {
     const template = agent.template;
 
     if (template === 'graph_notify') {
-      // Add start command handler
+      // Add middleware to log all incoming updates
+      bot.use((ctx, next) => {
+        console.log(`[Bot ${agent.id}] Received update:`, {
+          type: ctx.updateType,
+          message: ctx.message,
+          command: ctx.message?.text?.startsWith('/') ? ctx.message.text.split(' ')[0] : 'none'
+        });
+        return next();
+      });
+
+      // Add error handler
+      bot.catch((err, ctx) => {
+        console.error(`[Bot ${agent.id}] Error in bot handler:`, {
+          error: err,
+          update: ctx.update,
+          updateType: ctx.updateType
+        });
+      });
+
+      // Add start command handler with logging
       bot.command('start', async (ctx) => {
-        await ctx.reply(
-          "👋 Welcome to OpalGraphBot!\n\n" +
-          "I can help you analyze DeFi data from Uniswap. Just ask me questions like:\n" +
-          "• What's the current trading volume?\n" +
-          "• How many pools are active?\n" +
-          "• What's the total value locked?\n\n" +
-          "Try asking a question now! 📊"
-        );
+        console.log(`[Bot ${agent.id}] Processing /start command`);
+        try {
+          await ctx.reply(
+            "👋 Welcome to OpalGraphBot!\n\n" +
+            "I can help you analyze DeFi data from Uniswap. Just ask me questions like:\n" +
+            "• What's the current trading volume?\n" +
+            "• How many pools are active?\n" +
+            "• What's the total value locked?\n\n" +
+            "Try asking a question now! 📊"
+          );
+          console.log(`[Bot ${agent.id}] Successfully sent welcome message`);
+        } catch (error) {
+          console.error(`[Bot ${agent.id}] Error sending welcome message:`, error);
+          throw error;
+        }
       });
 
       bot.on('text', async (ctx) => {
         try {
+          console.log(`[Bot ${agent.id}] Received text message:`, {
+            text: ctx.message.text,
+            from: ctx.from,
+            chat: ctx.chat
+          });
+
           // Skip processing /start command
           if (ctx.message.text.startsWith('/')) {
+            console.log(`[Bot ${agent.id}] Skipping command message:`, ctx.message.text);
             return;
           }
 
           const question = ctx.message.text;
-          console.log(`[Bot ${agent.id}] Received analytics question:`, question);
+          console.log(`[Bot ${agent.id}] Processing analytics question:`, question);
 
           // First send a processing message
           const processingMsg = await ctx.reply("🔄 Processing your question about DeFi analytics...");
