@@ -1,16 +1,29 @@
 import { Link, useLocation } from "wouter";
-
-const steps = [
-  { path: "/", label: "Template" },
-  { path: "/persona", label: "Persona" },
-  { path: "/platform", label: "Platform" },
-  { path: "/review", label: "Review" },
-];
+import { useWizard } from "@/hooks/use-wizard";
 
 export function WizardNav() {
   const [location] = useLocation();
+  const { formData } = useWizard();
   // Convert the current location to a relative path
   const relativePath = location.replace("/wizard", "") || "/";
+
+  // Define base steps
+  let steps = [
+    { path: "/", label: "Template" },
+    { path: "/persona", label: "Persona" },
+  ];
+
+  // Add graph config step if template is graph_notify
+  if (formData.template === "graph_notify") {
+    steps.push({ path: "/graph-config", label: "Analytics" });
+  }
+
+  // Add platform and review steps
+  steps = [
+    ...steps,
+    { path: "/platform", label: "Platform" },
+    { path: "/review", label: "Review" },
+  ];
 
   return (
     <nav className="flex gap-2">

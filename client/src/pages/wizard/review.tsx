@@ -19,6 +19,15 @@ interface WizardFormData {
     token: string;
     channelId: string;
   };
+  graphConfig?: {
+    queryType: "pool_stats" | "volume_stats" | "global_stats";
+    schedule: string;
+    queryConfig: {
+      poolAddress?: string;
+      timeRange?: "24h" | "7d" | "30d";
+      topN?: number;
+    };
+  };
 }
 
 export default function ReviewStep() {
@@ -48,6 +57,19 @@ export default function ReviewStep() {
       });
     },
   });
+
+  const formatSchedule = (cronExpression: string) => {
+    switch (cronExpression) {
+      case "0 * * * *":
+        return "Hourly";
+      case "0 0 * * *":
+        return "Daily";
+      case "0 0 * * 0":
+        return "Weekly";
+      default:
+        return cronExpression;
+    }
+  };
 
   return (
     <div className="max-w-2xl mx-auto space-y-8">
@@ -80,6 +102,35 @@ export default function ReviewStep() {
                 Tone: {formData.persona?.tone}
               </p>
             </div>
+            {formData.template === "graph_notify" && formData.graphConfig && (
+              <div>
+                <h3 className="font-semibold mb-2">Analytics Configuration</h3>
+                <p className="text-sm text-muted-foreground">
+                  Query Type: {formData.graphConfig.queryType}
+                  <br />
+                  Update Schedule: {formatSchedule(formData.graphConfig.schedule)}
+                  <br />
+                  {formData.graphConfig.queryType === "pool_stats" && (
+                    <>
+                      Pool Address: {formData.graphConfig.queryConfig.poolAddress}
+                      <br />
+                    </>
+                  )}
+                  {formData.graphConfig.queryType === "volume_stats" && (
+                    <>
+                      Top Pools: {formData.graphConfig.queryConfig.topN}
+                      <br />
+                    </>
+                  )}
+                  {(formData.graphConfig.queryType === "pool_stats" ||
+                    formData.graphConfig.queryType === "volume_stats") && (
+                    <>
+                      Time Range: {formData.graphConfig.queryConfig.timeRange}
+                    </>
+                  )}
+                </p>
+              </div>
+            )}
             <div>
               <h3 className="font-semibold mb-2">Platform</h3>
               <p className="text-sm text-muted-foreground">
