@@ -10,7 +10,6 @@ import { eq } from "drizzle-orm";
  * Graph Integration Details
  * Subgraph: Uniswap V3 Analytics
  * Deployment URL: https://thegraph.com/hosted-service/subgraph/uniswap/uniswap-v3
- * Local Subgraph ID: HUZDsRpEVP2AvzDCyzDHtdc64dyDxx8FQjzymqSg4H3B
  * 
  * Implementation Features:
  * 1. Real-time DeFi analytics using The Graph protocol
@@ -26,8 +25,7 @@ import { eq } from "drizzle-orm";
  * - Market Trends (Price Movements, Volume Patterns)
  */
 
-const GRAPH_API_URL =
-  "https://gateway-arbitrum.network.thegraph.com/api/7ad5dec0c95579e6812957254486d013/subgraphs/id/HUZDsRpEVP2AvzDCyzDHtdc64dyDxx8FQjzymqSg4H3B";
+const GRAPH_API_URL = "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3";
 
 // Initialize OpenAI
 const openai = new OpenAI({
