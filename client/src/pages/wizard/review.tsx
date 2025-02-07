@@ -20,13 +20,8 @@ interface WizardFormData {
     channelId: string;
   };
   graphConfig?: {
-    queryType: "pool_stats" | "volume_stats" | "global_stats";
+    queryType: string;
     schedule: string;
-    queryConfig: {
-      poolAddress?: string;
-      timeRange?: "24h" | "7d" | "30d";
-      topN?: number;
-    };
   };
 }
 
@@ -109,25 +104,6 @@ export default function ReviewStep() {
                   Query Type: {formData.graphConfig.queryType}
                   <br />
                   Update Schedule: {formatSchedule(formData.graphConfig.schedule)}
-                  <br />
-                  {formData.graphConfig.queryType === "pool_stats" && (
-                    <>
-                      Pool Address: {formData.graphConfig.queryConfig.poolAddress}
-                      <br />
-                    </>
-                  )}
-                  {formData.graphConfig.queryType === "volume_stats" && (
-                    <>
-                      Top Pools: {formData.graphConfig.queryConfig.topN}
-                      <br />
-                    </>
-                  )}
-                  {(formData.graphConfig.queryType === "pool_stats" ||
-                    formData.graphConfig.queryType === "volume_stats") && (
-                    <>
-                      Time Range: {formData.graphConfig.queryConfig.timeRange}
-                    </>
-                  )}
                 </p>
               </div>
             )}
