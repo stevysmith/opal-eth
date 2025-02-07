@@ -1,11 +1,12 @@
-import { request, gql } from 'graphql-request';
-import OpenAI from 'openai';
-import { Telegraf } from 'telegraf';
+import { request, gql } from "graphql-request";
+import OpenAI from "openai";
+import { Telegraf } from "telegraf";
 import { db } from "@db";
 import { graphNotifications } from "@db/schema";
-import { eq } from 'drizzle-orm';
+import { eq } from "drizzle-orm";
 
-const GRAPH_API_URL = 'https://gateway-arbitrum.network.thegraph.com/api/7ad5dec0c95579e6812957254486d013/subgraphs/id/HUZDsRpEVP2AvzDCyzDHtdc64dyDxx8FQjzsmqSg4H3B';
+const GRAPH_API_URL =
+  "https://gateway-arbitrum.network.thegraph.com/api/7ad5dec0c95579e6812957254486d013/subgraphs/id/HUZDsRpEVP2AvzDCyzDHtdc64dyDxx8FQjzsmqSg4H3B";
 
 // Initialize OpenAI
 const openai = new OpenAI({
@@ -15,22 +16,23 @@ const openai = new OpenAI({
 const formatPoolStats = async (data: any) => {
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+      model: "gpt-4o-mini",  // Updated to use gpt-4o-mini model
       messages: [
         {
           role: "system",
-          content: "You are a DeFi analytics expert that creates concise, informative updates about Uniswap pool activity."
+          content:
+            "You are a DeFi analytics expert that creates concise, informative updates about Uniswap pool activity.",
         },
         {
           role: "user",
-          content: `Format the following Uniswap pool data into a clear, concise message suitable for a Telegram channel. Include key metrics and any notable changes: ${JSON.stringify(data, null, 2)}`
-        }
-      ]
+          content: `Format the following Uniswap pool data into a clear, concise message suitable for a Telegram channel. Include key metrics and any notable changes: ${JSON.stringify(data, null, 2)}`,
+        },
+      ],
     });
 
     return response.choices[0]?.message?.content || "Error formatting message";
   } catch (error) {
-    console.error('Error formatting pool stats:', error);
+    console.error("Error formatting pool stats:", error);
     return JSON.stringify(data, null, 2);
   }
 };
@@ -115,13 +117,13 @@ export class GraphService {
       const config = notification.queryConfig as any;
 
       switch (notification.queryType) {
-        case 'pool_stats':
+        case "pool_stats":
           data = await this.getPoolStats(config.poolAddress);
           break;
-        case 'volume_stats':
+        case "volume_stats":
           data = await this.getTopPools(config.topN);
           break;
-        case 'global_stats':
+        case "global_stats":
           data = await this.getGlobalStats();
           break;
         default:
@@ -136,9 +138,8 @@ export class GraphService {
         .update(graphNotifications)
         .set({ lastRun: new Date() })
         .where(eq(graphNotifications.id, notification.id));
-
     } catch (error) {
-      console.error('Error sending notification:', error);
+      console.error("Error sending notification:", error);
     }
   }
 }
