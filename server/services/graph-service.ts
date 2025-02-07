@@ -89,10 +89,14 @@ export class GraphService {
             content: `You are a DeFi data expert that converts natural language questions into GraphQL queries for the Uniswap v3 subgraph. Return only valid GraphQL queries based on this schema:
 
 Available entities and key fields:
-- Factory: poolCount, txCount, totalVolumeUSD, totalVolumeETH
-- Pool: token0, token1, feeTier, liquidity, volumeUSD, totalValueLockedUSD
-- Token: symbol, name, volume, volumeUSD, totalValueLocked
+- Factory: poolCount, txCount, totalVolumeUSD, totalVolumeETH, totalFeesUSD, totalValueLockedUSD
+- Pool: token0{symbol,name}, token1{symbol,name}, feeTier, liquidity, volumeUSD, totalValueLockedUSD, volumeToken0, volumeToken1
+- Token: symbol, name, volume, volumeUSD, totalValueLocked, poolCount, txCount
 - Swap: timestamp, amount0, amount1, amountUSD
+- UniswapDayData: volumeUSD, volumeETH, feesUSD, txCount, tvlUSD
+- PoolDayData: pool{id}, volumeUSD, tvlUSD, token0Price, token1Price, high, low, open, close
+
+Use time-based queries with entities like UniswapDayData or PoolDayData for historical data. Sort with orderBy and orderDirection. Limit results with first parameter.
 
 Format response as a JSON object with a 'query' field containing the GraphQL query.`
           },
