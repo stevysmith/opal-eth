@@ -109,7 +109,14 @@ Format response as a JSON object with a 'query' field containing the GraphQL que
       });
 
       const aiResponse = JSON.parse(response.choices[0]?.message?.content || "{}");
-      return aiResponse.query || "Error generating query";
+      let query = aiResponse.query;
+      
+      // Add factory ID if querying factory data
+      if (query.includes('factory {') && !query.includes('factory(id:')) {
+        query = query.replace('factory {', 'factory(id: "0x1F98431c8aD98523631AE4a59f267346ea31F984") {');
+      }
+      
+      return query || "Error generating query";
     } catch (error) {
       console.error("Error generating GraphQL query:", error);
       throw new Error("Failed to generate query from question");
