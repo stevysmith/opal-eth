@@ -22,43 +22,19 @@ import {
 } from "@/components/ui/form";
 import { useWizard } from "@/hooks/use-wizard";
 
-// Define validation schemas
-const queryTypeSchema = z.enum(["pool_stats", "volume_stats", "global_stats"]);
-const scheduleSchema = z.enum(["hourly", "daily", "weekly"]);
-const timeRangeSchema = z.enum(["24h", "7d", "30d"]);
-
 const graphConfigSchema = z.object({
-  queryType: queryTypeSchema,
-  schedule: scheduleSchema,
+  queryType: z.enum(["pool_stats", "volume_stats", "global_stats"]),
+  schedule: z.enum(["hourly", "daily", "weekly"]),
   poolAddress: z.string().optional(),
-  timeRange: timeRangeSchema.optional(),
-  topN: z.number().min(1).max(100).optional(),
+  timeRange: z.enum(["24h", "7d", "30d"]).optional(),
+  topN: z.coerce.number().min(1).max(100).optional(),
 });
 
 type GraphConfigFormData = z.infer<typeof graphConfigSchema>;
 
-type WizardFormData = {
-  template?: string;
-  graphConfig?: {
-    queryType: string;
-    schedule: string;
-    queryConfig: {
-      poolAddress?: string;
-      timeRange?: string;
-      topN?: number;
-    };
-  };
-};
-
-const scheduleToPattern = {
-  hourly: "0 * * * *",
-  daily: "0 0 * * *",
-  weekly: "0 0 * * 0",
-};
-
 export default function GraphConfigStep() {
   const [, navigate] = useLocation();
-  const { formData, setFormData } = useWizard<WizardFormData>();
+  const { formData, setFormData } = useWizard();
 
   const form = useForm<GraphConfigFormData>({
     resolver: zodResolver(graphConfigSchema),
@@ -72,7 +48,13 @@ export default function GraphConfigStep() {
 
   const watchQueryType = form.watch("queryType");
 
-  const onSubmit = (data: GraphConfigFormData) => {
+  const onSubmit = form.handleSubmit((data) => {
+    const scheduleMap = {
+      hourly: "0 * * * *",
+      daily: "0 0 * * *",
+      weekly: "0 0 * * 0",
+    };
+
     const queryConfig = {
       ...(data.queryType === "pool_stats"
         ? { poolAddress: data.poolAddress, timeRange: data.timeRange }
@@ -85,13 +67,13 @@ export default function GraphConfigStep() {
       ...formData,
       graphConfig: {
         queryType: data.queryType,
-        schedule: scheduleToPattern[data.schedule],
+        schedule: scheduleMap[data.schedule],
         queryConfig,
       },
     });
 
     navigate("/wizard/platform");
-  };
+  });
 
   return (
     <div className="max-w-2xl mx-auto space-y-8">
@@ -103,17 +85,14 @@ export default function GraphConfigStep() {
       </div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <form onSubmit={onSubmit} className="space-y-6">
           <FormField
             control={form.control}
             name="queryType"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Query Type</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  defaultValue={field.value}
-                >
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Select what to query" />
@@ -139,10 +118,7 @@ export default function GraphConfigStep() {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Update Frequency</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  defaultValue={field.value}
-                >
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Select frequency" />
@@ -177,7 +153,7 @@ export default function GraphConfigStep() {
                       />
                     </FormControl>
                     <FormDescription>
-                      The Uniswap V3 pool address to monitor (e.g. ETH-USDC pool)
+                      The Uniswap V3 pool address to monitor
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -190,10 +166,7 @@ export default function GraphConfigStep() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Time Range</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                    >
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select time range" />
@@ -205,6 +178,9 @@ export default function GraphConfigStep() {
                         <SelectItem value="30d">Last 30 Days</SelectItem>
                       </SelectContent>
                     </Select>
+                    <FormDescription>
+                      Period to analyze pool statistics
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -243,10 +219,7 @@ export default function GraphConfigStep() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Time Range</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                    >
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select time range" />
@@ -258,6 +231,9 @@ export default function GraphConfigStep() {
                         <SelectItem value="30d">Last 30 Days</SelectItem>
                       </SelectContent>
                     </Select>
+                    <FormDescription>
+                      Period to analyze volume statistics
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
