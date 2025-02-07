@@ -14,44 +14,6 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const formatPoolStats = async (data: any) => {
-  try {
-    // If data is empty or undefined, return an error message
-    if (!data || (typeof data === 'object' && Object.keys(data).length === 0)) {
-      return "⚠️ Unable to fetch DeFi statistics at the moment. The network may be experiencing temporary issues. Please try again in a few minutes.";
-    }
-
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a DeFi analytics expert that creates concise, informative updates about Uniswap pool activity. Format the response to be easily readable in a Telegram message with emojis and bullet points. Include insights about changes and trends when possible.",
-        },
-        {
-          role: "user",
-          content: `Analyze and summarize the following DeFi data in a clear, informative way that highlights key metrics and notable changes. Data: ${JSON.stringify(data, null, 2)}`,
-        },
-      ],
-      response_format: { type: "json_object" },
-    });
-
-    // Parse the JSON response and format it for Telegram
-    const aiResponse = JSON.parse(response.choices[0]?.message?.content || "{}");
-    return aiResponse.message || "Error formatting message";
-  } catch (error) {
-    console.error("Error formatting pool stats:", error);
-    // More descriptive fallback message
-    if (error.message?.includes("indexers")) {
-      return "🔄 The DeFi analytics service is currently syncing with the latest blockchain data. Please try again in a few minutes.";
-    }
-    // Fallback to basic formatting if AI fails
-    const stats = data.factory || data.pool || data.pools;
-    return `📊 DeFi Analytics Update\n\n${JSON.stringify(stats, null, 2)}`;
-  }
-};
-
 // Helper function to add retry logic for Graph queries
 async function retryRequest(queryFn: () => Promise<any>, maxRetries = 3): Promise<any> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -81,6 +43,44 @@ export class GraphService {
 
   constructor(telegramToken: string) {
     this.bot = new Telegraf(telegramToken);
+  }
+
+  async formatPoolStats(data: any) {
+    try {
+      // If data is empty or undefined, return an error message
+      if (!data || (typeof data === 'object' && Object.keys(data).length === 0)) {
+        return "⚠️ Unable to fetch DeFi statistics at the moment. The network may be experiencing temporary issues. Please try again in a few minutes.";
+      }
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a DeFi analytics expert that creates concise, informative updates about Uniswap pool activity. Format the response to be easily readable in a Telegram message with emojis and bullet points. Include insights about changes and trends when possible.",
+          },
+          {
+            role: "user",
+            content: `Analyze and summarize the following DeFi data in a clear, informative way that highlights key metrics and notable changes. Data: ${JSON.stringify(data, null, 2)}`,
+          },
+        ],
+        response_format: { type: "json_object" },
+      });
+
+      // Parse the JSON response and format it for Telegram
+      const aiResponse = JSON.parse(response.choices[0]?.message?.content || "{}");
+      return aiResponse.message || "Error formatting message";
+    } catch (error) {
+      console.error("Error formatting pool stats:", error);
+      // More descriptive fallback message
+      if (error.message?.includes("indexers")) {
+        return "🔄 The DeFi analytics service is currently syncing with the latest blockchain data. Please try again in a few minutes.";
+      }
+      // Fallback to basic formatting if AI fails
+      const stats = data.factory || data.pool || data.pools;
+      return `📊 DeFi Analytics Update\n\n${JSON.stringify(stats, null, 2)}`;
+    }
   }
 
   async getPoolStats(poolAddress: string) {
@@ -194,7 +194,7 @@ export class GraphService {
           throw new Error(`Unknown query type: ${notification.queryType}`);
       }
 
-      const formattedMessage = await formatPoolStats(data);
+      const formattedMessage = await this.formatPoolStats(data);
       await this.bot.telegram.sendMessage(channelId, formattedMessage);
 
       // Update last run time
