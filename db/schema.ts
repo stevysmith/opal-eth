@@ -94,7 +94,7 @@ export const giveawayEntries = pgTable("giveaway_entries", {
 export const graphNotifications = pgTable("graph_notifications", {
   id: serial("id").primaryKey(),
   agentId: integer("agent_id").notNull().references(() => agents.id),
-  queryType: text("query_type").notNull(), // pool_stats, volume_stats, etc.
+  queryType: text("query_type").notNull(), // pool_stats, volume_stats, global_stats
   queryConfig: jsonb("query_config").notNull(), // Specific parameters for the query
   schedule: text("schedule").notNull(), // Cron expression for notification timing
   lastRun: timestamp("last_run"), // Track last notification sent
