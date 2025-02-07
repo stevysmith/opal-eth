@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { TemplateCard } from "@/components/wizard/TemplateCard";
-import { MessageSquare, Award, BarChart3 } from "lucide-react";
+import { MessageSquare, Award, BarChart3, LineChart } from "lucide-react";
 import { useWizard } from "@/hooks/use-wizard";
 
 const templates = [
@@ -24,6 +24,12 @@ const templates = [
     description: "Create polls and gather feedback from your community",
     icon: <BarChart3 className="h-5 w-5" />,
   },
+  {
+    id: "graph_notify",
+    title: "DeFi Analytics",
+    description: "Get real-time DeFi analytics and insights from The Graph",
+    icon: <LineChart className="h-5 w-5" />,
+  },
 ] as const;
 
 type TemplateId = (typeof templates)[number]["id"];
@@ -37,7 +43,7 @@ export default function TemplateStep() {
 
   const handleContinue = () => {
     if (selected) {
-      setFormData({ template: selected });
+      setFormData({ ...formData, template: selected });
       navigate("/wizard/persona");
     }
   };
