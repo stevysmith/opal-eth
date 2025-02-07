@@ -16,6 +16,11 @@ const openai = new OpenAI({
 
 const formatPoolStats = async (data: any) => {
   try {
+    // If data is empty or undefined, return an error message
+    if (!data || (typeof data === 'object' && Object.keys(data).length === 0)) {
+      return "⚠️ Unable to fetch DeFi statistics at the moment. The network may be experiencing temporary issues. Please try again in a few minutes.";
+    }
+
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
@@ -37,11 +42,30 @@ const formatPoolStats = async (data: any) => {
     return aiResponse.message || "Error formatting message";
   } catch (error) {
     console.error("Error formatting pool stats:", error);
+    // More descriptive fallback message
+    if (error.message?.includes("indexers")) {
+      return "🔄 The DeFi analytics service is currently syncing with the latest blockchain data. Please try again in a few minutes.";
+    }
     // Fallback to basic formatting if AI fails
     const stats = data.factory || data.pool || data.pools;
     return `📊 DeFi Analytics Update\n\n${JSON.stringify(stats, null, 2)}`;
   }
 };
+
+// Helper function to add retry logic for Graph queries
+async function retryRequest(queryFn: () => Promise<any>, maxRetries = 3): Promise<any> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await queryFn();
+    } catch (error) {
+      if (attempt === maxRetries || !error.message?.includes("indexers")) {
+        throw error;
+      }
+      // Wait before retrying, with exponential backoff
+      await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+    }
+  }
+}
 
 export class GraphService {
   private bot: Telegraf;
@@ -84,7 +108,7 @@ export class GraphService {
       poolAddress: poolAddress.toLowerCase(),
     };
 
-    return request(GRAPH_API_URL, query, variables);
+    return retryRequest(() => request(GRAPH_API_URL, query, variables));
   }
 
   async getTopPools(limit: number = 5) {
@@ -116,7 +140,7 @@ export class GraphService {
       }
     `;
 
-    return request(GRAPH_API_URL, query, { limit });
+    return retryRequest(() => request(GRAPH_API_URL, query, { limit }));
   }
 
   async getGlobalStats() {
@@ -137,7 +161,7 @@ export class GraphService {
       }
     `;
 
-    return request(GRAPH_API_URL, query);
+    return retryRequest(() => request(GRAPH_API_URL, query));
   }
 
   async sendNotification(agentId: number, channelId: string) {
@@ -176,6 +200,15 @@ export class GraphService {
         .where(eq(graphNotifications.id, notification.id));
     } catch (error) {
       console.error("Error sending notification:", error);
+      // Try to send an error message to the channel
+      try {
+        await this.bot.telegram.sendMessage(
+          channelId,
+          "⚠️ Unable to fetch DeFi analytics at this time. Will retry on next scheduled update."
+        );
+      } catch (telegramError) {
+        console.error("Error sending error notification:", telegramError);
+      }
       throw error; // Propagate error to caller
     }
   }
