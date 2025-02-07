@@ -6,10 +6,18 @@ import { eq } from "drizzle-orm";
 import fetch from "node-fetch";
 import schedule from "node-schedule";
 import { giveawayPayoutService } from '../src/services/giveawayPayoutService';
+import { GraphService } from './graph-service'; // Assuming this is the correct import path
 
 class BotManager {
   private bots: Map<number, Telegraf<Context<Update>>> = new Map();
   private jobs: Map<number, schedule.Job> = new Map();
+  private bot: Telegraf<Context<Update>>; //Added to store the bot instance
+  private graphService: GraphService;
+
+  constructor(telegramToken: string) {
+    this.bot = new Telegraf(telegramToken);
+    this.graphService = new GraphService(telegramToken);
+  }
 
   async initializeAgent(agentId: number) {
     try {
@@ -677,16 +685,21 @@ class BotManager {
         return false;
       }
 
-      // Send analytics update
-      await bot.telegram.sendMessage(
-        config.channelId,
-        `📊 Analytics Update (Manual Trigger)\n\n` +
-        `🔄 Latest DeFi Statistics:\n` +
-        `• Total Value Locked: $1.2B\n` +
-        `• 24h Volume: $150M\n` +
-        `• Active Users: 15.2k\n\n` +
-        `🕒 Next scheduled update will be sent according to your configured schedule.`
-      );
+      // Fetch real analytics data
+      console.log(`[Bot ${agentId}] Fetching analytics data...`);
+      const [globalStats, topPools] = await Promise.all([
+        this.graphService.getGlobalStats(),
+        this.graphService.getTopPools(3)
+      ]);
+
+      // Format the data using OpenAI for insights
+      const message = await this.graphService.formatPoolStats({
+        global: globalStats,
+        topPools: topPools
+      });
+
+      // Send the formatted analytics update
+      await bot.telegram.sendMessage(config.channelId, message);
 
       console.log(`[Bot ${agentId}] Manual analytics update sent successfully`);
       return true;
@@ -697,4 +710,4 @@ class BotManager {
   }
 }
 
-export const botManager = new BotManager();
+export const botManager = new BotManager(""); // Replace "" with actual token
