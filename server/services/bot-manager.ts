@@ -649,12 +649,29 @@ class BotManager {
     console.log(`[Bot ${agentId}] Command handlers registration completed`);
   };
 
-  private setupQACommands(bot: Telegraf<Context<Update>>, agent: any) { // Added 'any' type for agent
+  private setupQACommands(bot: Telegraf<Context<Update>>, agent: any) {
     const template = agent.template;
 
     if (template === 'graph_notify') {
+      // Add start command handler
+      bot.command('start', async (ctx) => {
+        await ctx.reply(
+          "👋 Welcome to OpalGraphBot!\n\n" +
+          "I can help you analyze DeFi data from Uniswap. Just ask me questions like:\n" +
+          "• What's the current trading volume?\n" +
+          "• How many pools are active?\n" +
+          "• What's the total value locked?\n\n" +
+          "Try asking a question now! 📊"
+        );
+      });
+
       bot.on('text', async (ctx) => {
         try {
+          // Skip processing /start command
+          if (ctx.message.text.startsWith('/')) {
+            return;
+          }
+
           const question = ctx.message.text;
           console.log(`[Bot ${agent.id}] Received analytics question:`, question);
 
