@@ -57,11 +57,11 @@ export class GraphService {
           {
             role: "system",
             content:
-              "You are a DeFi analytics expert that creates concise, informative updates about Uniswap pool activity. Format your response as a JSON object with a 'message' field containing the formatted message. For text formatting in Telegram, use _text_ for italics and __text__ for bold. Include emojis and bullet points. The message will be sent to a Telegram channel.",
+              "You are a DeFi analytics expert that creates concise, informative updates about Uniswap pool activity. Format your response as a JSON object with a 'message' field containing the formatted message. Use emojis and bullet points to make the information clear and readable.",
           },
           {
             role: "user",
-            content: `Please analyze this DeFi data and return a JSON formatted response with key metrics and changes, formatted for Telegram: ${JSON.stringify(data, null, 2)}`,
+            content: `Please analyze this DeFi data and return a JSON formatted response with key metrics and changes: ${JSON.stringify(data, null, 2)}`,
           },
         ],
         response_format: { type: "json_object" },
@@ -97,7 +97,7 @@ Available entities and key fields:
 Format response as a JSON object with a 'query' field containing the GraphQL query.`
           },
           {
-            role: "user", 
+            role: "user",
             content: userQuestion
           }
         ],
@@ -114,9 +114,9 @@ Format response as a JSON object with a 'query' field containing the GraphQL que
 
   async executeUserQuery(userQuestion: string): Promise<any> {
     const query = await this.generateGraphQuery(userQuestion);
-    console.log("[GraphService] Generated query from question:", { 
+    console.log("[GraphService] Generated query from question:", {
       question: userQuestion,
-      query 
+      query
     });
 
     return retryRequest(() => request(GRAPH_API_URL, query));
