@@ -1,0 +1,75 @@
+[GraphService] Executing GraphQL query: { attempt: 1, query: '()=>request(GRAPH_API_URL,query)' }
+[GraphService] Query error: {
+  attempt: 1,
+  error: 'No value provided for required argument: `id`: {"response":{"data":null,"errors":[{"message":"No value provided for required argument: `id`"}],"status":200,"headers":{}},"request":{"query":"query { factory { totalVolumeUSD } }"}}',
+  stack: 'Error: No value provided for required argument: `id`: {"response":{"data":null,"errors":[{"message":"No value provided for required argument: `id`"}],"status":200,"headers":{}},"request":{"query":"query { factory { totalVolumeUSD } }"}}\n' +
+    '    at runRequest (/home/runner/workspace/node_modules/graphql-request/src/legacy/helpers/runRequest.ts:105:12)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n' +
+    '    at async GraphQLClient.request (/home/runner/workspace/node_modules/graphql-request/src/legacy/classes/GraphQLClient.ts:131:22)\n' +
+    '    at async retryRequest (/home/runner/workspace/server/services/graph-service.ts:25:14)\n' +
+    '    at async <anonymous> (/home/runner/workspace/server/services/bot-manager.ts:723:26)\n' +
+    '    at async execute (/home/runner/workspace/node_modules/telegraf/lib/composer.js:518:17)\n' +
+    '    at async /home/runner/workspace/node_modules/telegraf/lib/composer.js:519:21\n' +
+    '    at async execute (/home/runner/workspace/node_modules/telegraf/lib/composer.js:518:17)\n' +
+    '    at async /home/runner/workspace/node_modules/telegraf/lib/composer.js:519:21\n' +
+    '    at async execute (/home/runner/workspace/node_modules/telegraf/lib/composer.js:518:17)\n' +
+    '    at async /home/runner/workspace/node_modules/telegraf/lib/composer.js:519:21\n' +
+    '    at async execute (/home/runner/workspace/node_modules/telegraf/lib/composer.js:518:17)\n' +
+    '    at async /home/runner/workspace/node_modules/telegraf/lib/composer.js:519:21\n' +
+    '    at async execute (/home/runner/workspace/node_modules/telegraf/lib/composer.js:518:17)\n' +
+    '    at async /home/runner/workspace/node_modules/telegraf/lib/composer.js:519:21\n' +
+    '    at async execute (/home/runner/workspace/node_modules/telegraf/lib/composer.js:518:17)\n' +
+    '    at async execute (/home/runner/workspace/node_modules/telegraf/lib/composer.js:518:17)\n' +
+    '    at async execute (/home/runner/workspace/node_modules/telegraf/lib/composer.js:518:17)\n' +
+    '    at async /home/runner/workspace/node_modules/p-timeout/index.js:50:13'
+}
+[Bot 25] Error processing analytics question: ClientError: No value provided for required argument: `id`: {"response":{"data":null,"errors":[{"message":"No value provided for required argument: `id`"}],"status":200,"headers":{}},"request":{"query":"query { factory { totalVolumeUSD } }"}}
+    at runRequest (/home/runner/workspace/node_modules/graphql-request/src/legacy/helpers/runRequest.ts:105:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async GraphQLClient.request (/home/runner/workspace/node_modules/graphql-request/src/legacy/classes/GraphQLClient.ts:131:22)
+    at async retryRequest (/home/runner/workspace/server/services/graph-service.ts:25:14)
+    at async <anonymous> (/home/runner/workspace/server/services/bot-manager.ts:723:26)
+    at async execute (/home/runner/workspace/node_modules/telegraf/lib/composer.js:518:17)
+    at async /home/runner/workspace/node_modules/telegraf/lib/composer.js:519:21
+    at async execute (/home/runner/workspace/node_modules/telegraf/lib/composer.js:518:17)
+    at async /home/runner/workspace/node_modules/telegraf/lib/composer.js:519:21
+    at async execute (/home/runner/workspace/node_modules/telegraf/lib/composer.js:518:17)
+    at async /home/runner/workspace/node_modules/telegraf/lib/composer.js:519:21
+    at async execute (/home/runner/workspace/node_modules/telegraf/lib/composer.js:518:17)
+    at async /home/runner/workspace/node_modules/telegraf/lib/composer.js:519:21
+    at async execute (/home/runner/workspace/node_modules/telegraf/lib/composer.js:518:17)
+    at async /home/runner/workspace/node_modules/telegraf/lib/composer.js:519:21
+    at async execute (/home/runner/workspace/node_modules/telegraf/lib/composer.js:518:17)
+    at async execute (/home/runner/workspace/node_modules/telegraf/lib/composer.js:518:17)
+    at async execute (/home/runner/workspace/node_modules/telegraf/lib/composer.js:518:17)
+    at async /home/runner/workspace/node_modules/p-timeout/index.js:50:13 {
+  response: {
+    data: null,
+    errors: [ [Object] ],
+    extensions: undefined,
+    status: 200,
+    headers: Headers {
+      date: 'Fri, 07 Feb 2025 19:12:10 GMT',
+      'content-type': 'application/json',
+      'transfer-encoding': 'chunked',
+      connection: 'keep-alive',
+      'graph-attestation': '{"requestCID":"0xf2ebece9c768148afe468a429c2b83af77e6f6f41e38142f6b24f08491e6e2e6","responseCID":"0x862add20930ba9b0b78b661e4c44e40b6c9db4a374b2332ed1fa0b3ecc5728e5","subgraphDeploymentID":"0x75996d907d093035eebbf8c0b497a65a18715e35fab30a55f1d01ca82d908457","r":"0x701a6bf72d1b6adae0602b03d0ed4ddc0c3f5a6fe037f8922917be30902fa409","s":"0x529efb43912ca3158b4c7267bec97cf94528dcd0248ba7550fdc8662c0e3bd02","v":1}',
+      vary: 'origin, access-control-request-method, access-control-request-headers',
+      'access-control-allow-origin': '*',
+      'strict-transport-security': 'max-age=15724800; includeSubDomains',
+      'access-control-allow-credentials': 'true',
+      'access-control-allow-methods': 'PUT, GET, POST, OPTIONS',
+      'access-control-allow-headers': 'DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization',
+      'access-control-max-age': '3600',
+      'cf-cache-status': 'DYNAMIC',
+      'set-cookie': '__cf_bm=EuWKPWbOVxb_FksCexOBBUhD_.IIpmOyZdJXn148AYQ-1738955530-1.0.1.1-C38t7VnlMRUscHw1sdfRrRYrAq9OARhfYDDpgZwfTC.kyIzCJKB4ggpkObo846ND_P6GqqmnAh_N.LWOlHE5jQ; path=/; expires=Fri, 07-Feb-25 19:42:10 GMT; domain=.thegraph.com; HttpOnly; Secure; SameSite=None',
+      server: 'cloudflare',
+      'cf-ray': '90e5b0a14d78deec-SEA',
+      'content-encoding': 'br'
+    }
+  },
+  request: {
+    query: 'query { factory { totalVolumeUSD } }',
+    variables: undefined
+  }
+}
