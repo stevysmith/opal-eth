@@ -1,3 +1,4 @@
+
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,7 +40,7 @@ export default function GraphConfigStep() {
   const form = useForm<FormData>({
     resolver: zodResolver(graphConfigSchema),
     defaultValues: {
-      queryType: "pool_stats",
+      queryType: formData.graphConfig?.queryType || "pool_stats",
       schedule: "daily",
       timeRange: "24h",
       topN: 3,
