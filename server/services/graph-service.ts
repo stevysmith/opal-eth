@@ -65,12 +65,12 @@ export class GraphService {
           token0 {
             symbol
             name
-            totalValueLockedUSD
+            totalValueLocked
           }
           token1 {
             symbol
             name
-            totalValueLockedUSD
+            totalValueLocked
           }
           poolDayData(first: 2, orderBy: date, orderDirection: desc) {
             volumeUSD
@@ -131,7 +131,7 @@ export class GraphService {
         uniswapDayDatas(first: 2, orderBy: date, orderDirection: desc) {
           date
           volumeUSD
-          tvlUSD
+          totalValueLockedUSD
           txCount
         }
       }
