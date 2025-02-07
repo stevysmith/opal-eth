@@ -1,14 +1,14 @@
 import {
   AgentKit,
-  CdpWalletProvider,
-  erc20ActionProvider,
-  cdpApiActionProvider,
+  ViemWalletProvider,
+  erc20ActionProvider, // ✅ Add this!
 } from "@coinbase/agentkit";
 import { db } from "@db";
-import { mpcWallets } from "@db/schema";
-import { eq } from "drizzle-orm";
 import { ethers } from "ethers";
-import { Interface } from "ethers";
+
+import { createWalletClient, http } from "viem";
+import { baseSepolia } from "viem/chains";
+import { privateKeyToAccount } from "viem/accounts";
 
 class CoinbaseService {
   private agentKit: AgentKit;
@@ -17,12 +17,6 @@ class CoinbaseService {
     apiKeyPrivateKey: string;
     networkId: string;
     treasuryAddress: string;
-  };
-
-  // USDC contract addresses for different networks
-  private readonly USDC_CONTRACTS = {
-    "base-sepolia": "0x6Ac3aB54Dc5019A2e57eCcb214337FF5bbD52897", // Base Sepolia USDC
-    "base-mainnet": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // Base Mainnet USDC
   };
 
   constructor(config: { apiKeyName: string; apiKeyPrivateKey: string }) {
@@ -42,223 +36,116 @@ class CoinbaseService {
 
   async initialize() {
     try {
-      if (this.agentKit) {
-        return; // Already initialized
-      }
+      if (this.agentKit) return; // Already initialized
 
-      // First configure the wallet provider
-      const walletProvider = await CdpWalletProvider.configureWithWallet({
-        apiKeyName: this.config.apiKeyName,
-        apiKeyPrivateKey: this.config.apiKeyPrivateKey,
-        networkId: this.config.networkId,
+      console.log("🔍 Using Viem to configure wallet with private key");
+
+      // Ensure private key is formatted correctly
+      const rawPrivateKey = process.env.TREASURY_WALLET_PRIVATE_KEY!;
+      const privateKey = rawPrivateKey.startsWith("0x")
+        ? rawPrivateKey
+        : `0x${rawPrivateKey}`;
+
+      // Create Viem Wallet Client using the correct treasury wallet
+      const account = privateKeyToAccount(privateKey);
+      const client = createWalletClient({
+        account,
+        chain: baseSepolia,
+        transport: http(),
       });
 
-      // Initialize AgentKit with providers
+      const walletProvider = new ViemWalletProvider(client);
+
       this.agentKit = await AgentKit.from({
         walletProvider,
         actionProviders: [
-          cdpApiActionProvider({
-            apiKeyName: this.config.apiKeyName,
-            apiKeyPrivateKey: this.config.apiKeyPrivateKey,
-          }),
-          erc20ActionProvider({
-            walletProvider,
-            networkId: this.config.networkId,
-            chainId: "0x14a33", // Base Sepolia chain ID
-            provider: walletProvider,
-            contractAddress:
-              this.USDC_CONTRACTS[
-                this.config.networkId as keyof typeof this.USDC_CONTRACTS
-              ],
-            spender: this.config.treasuryAddress,
-          }),
+          erc20ActionProvider({ walletProvider, networkId: "base-sepolia" }), // ✅ Ensure ERC20 actions are available
         ],
       });
 
-      console.log("CoinbaseService initialized successfully");
+      // Verify which wallet is being used
+      const agentKitAddress = await walletProvider.getAddress();
+      console.log(`✅ AgentKit is now using wallet: ${agentKitAddress}`);
+      console.log(
+        `✅ Treasury Wallet (Expected): ${this.config.treasuryAddress}`,
+      );
     } catch (error) {
-      console.error("Error initializing CoinbaseService:", error);
+      console.error("❌ Error initializing CoinbaseService:", error);
       throw error;
     }
   }
 
   private async ensureInitialized() {
-    if (!this.agentKit) {
-      await this.initialize();
-    }
+    if (!this.agentKit) await this.initialize();
   }
 
-  async approveUsdc(): Promise<string> {
+  async getUsdcBalance(walletAddress: string): Promise<string> {
     try {
-      const walletProvider = await CdpWalletProvider.configureWithWallet({
-        apiKeyName: this.config.apiKeyName,
-        apiKeyPrivateKey: this.config.apiKeyPrivateKey,
-        networkId: this.config.networkId,
-      });
+      await this.ensureInitialized();
 
-      const usdcAddress =
-        this.USDC_CONTRACTS[
-          this.config.networkId as keyof typeof this.USDC_CONTRACTS
-        ];
-
-      const approvalAmount = "115792089237316195423570985008687907853269984665640564039457584007913129639935"; // max uint256
-
-      const tx = await walletProvider.sendTransaction({
-        to: usdcAddress,
-        value: "0",
-        data: new Interface([
-          "function approve(address spender, uint256 amount)"
-        ]).encodeFunctionData("approve", [this.config.treasuryAddress, approvalAmount]),
-        chainId: 84532,
-        maxFeePerGas: "50000000000", // 50 gwei
-        maxPriorityFeePerGas: "10000000000" // 10 gwei
-      });
-
-      console.log("Approve transaction hash:", tx.hash);
-      await tx.wait();
-
-      return tx.hash;
-    } catch (error) {
-      console.error("Error approving USDC:", error);
-      throw error;
-    }
-  }
-
-  async hasUsdcApproval(): Promise<boolean> {
-    try {
       const actions = this.agentKit.getActions();
-      const allowanceAction = actions.find(
-        (a) => a.name === "ERC20ActionProvider_get_allowance",
+      const balanceAction = actions.find(
+        (a) => a.name === "ERC20ActionProvider_get_balance",
       );
-      if (!allowanceAction) {
-        throw new Error("Allowance action not found");
-      }
+      if (!balanceAction) throw new Error("Balance action not found");
 
-      const usdcAddress =
-        this.USDC_CONTRACTS[
-          this.config.networkId as keyof typeof this.USDC_CONTRACTS
-        ];
-      const allowance = await allowanceAction.invoke({
-        contractAddress: usdcAddress,
-        spender: this.config.treasuryAddress,
+      const balance = await balanceAction.invoke({
+        contractAddress: "usdc", // AgentKit resolves USDC contract automatically
+        wallet: walletAddress,
       });
 
-      return BigInt(allowance) > 0n;
+      console.log(`💰 USDC Balance for ${walletAddress}: ${balance}`);
+      return balance.toString();
     } catch (error) {
-      console.error("Error checking USDC approval:", error);
-      return false;
+      console.error("❌ Error getting USDC balance:", error);
+      throw new Error("Failed to get USDC balance");
     }
   }
 
   async sendUsdc(toAddress: string, amount: string): Promise<string> {
     try {
-      // Get available actions
+      await this.ensureInitialized();
+
+      if (!ethers.isAddress(toAddress)) {
+        throw new Error(`Invalid recipient address: ${toAddress}`);
+      }
+
+      const senderAddress = this.config.treasuryAddress;
+      const baseUnits = ethers.parseUnits(amount, 6).toString();
+
+      console.log(`🚀 Sending ${amount} USDC (${baseUnits} base units) from ${senderAddress} to ${toAddress}`);
+
+      // Use AgentKit's built-in transfer method
       const actions = this.agentKit.getActions();
-      console.log(
-        "Available actions for sendUsdc:",
-        actions.map((a) => a.name),
-      );
+      const transferAction = actions.find(a => a.name === "ERC20ActionProvider_transfer");
+      if (!transferAction) throw new Error("Transfer action not found");
 
-      // Get the transfer action first
-      const transferAction = actions.find(
-        (a) => a.name === "ERC20ActionProvider_transfer",
-      );
-      if (!transferAction) {
-        console.log(
-          "Available actions:",
-          actions.map((a) => ({ name: a.name, methods: Object.keys(a) })),
-        );
-        throw new Error(
-          "Transfer action not found. Available actions: " +
-            actions.map((a) => a.name).join(", "),
-        );
-      }
+      console.log("🔍 Transfer Action Details:", transferAction);
 
-      // Log the schema shape to understand expected parameters
-      console.log("Transfer action schema shape:", {
-        description: transferAction.description,
-        shape: Object.keys(transferAction.schema._def.shape()),
-      });
-
-      // Get USDC contract address for current network
-      const usdcAddress =
-        this.USDC_CONTRACTS[
-          this.config.networkId as keyof typeof this.USDC_CONTRACTS
-        ];
-      if (!usdcAddress) {
-        throw new Error(
-          `No USDC contract address configured for network: ${this.config.networkId}`,
-        );
-      }
-
-      // Convert amount to USDC base units (6 decimals)
-      const baseUnits = BigInt(Math.round(parseFloat(amount) * 1_000_000));
-
-      // Create the transfer parameters
-      const transferParams = {
-        amount: baseUnits.toString(),
-        contractAddress: usdcAddress,
+      const txResponse = await transferAction.invoke({
+        contractAddress: "0x94a9D9AC8a22534E3FaCa9F4e7F2E2cf85d5E4C8", // USDC Contract
         destination: toAddress,
-      };
-
-      console.log("Attempting USDC transfer with params:", {
-        ...transferParams.args,
-        originalAmount: amount,
-        amountAsString: baseUnits.toString(),
-        network: this.config.networkId,
+        amount: baseUnits,
       });
 
-      // Call the transfer method using invoke
-      const tx = await transferAction.invoke(transferParams);
+      console.log("🛠 Full Transaction Response Object:", JSON.stringify(txResponse, null, 2));
 
-      console.log("Transfer response:", tx);
-      return tx.hash;
+      // Extract transaction hash dynamically from string
+      const txHashMatch = txResponse.match(/Transaction hash for the transfer: (0x[a-fA-F0-9]{64})/);
+      const txHash = txHashMatch ? txHashMatch[1] : null;
+
+      if (!txHash) {
+        throw new Error("⚠️ Transaction response is missing a valid hash.");
+      }
+
+      console.log(`✅ USDC Sent! Transaction Hash: ${txHash}`);
+      return txHash;
     } catch (error) {
-      console.error("Error sending USDC:", error);
-      throw new Error(
-        "Failed to send USDC: " +
-          (error instanceof Error ? error.message : "Unknown error"),
-      );
+      console.error("❌ Error sending USDC:", error);
+      throw error;
     }
   }
 
-  async getUsdcBalance(walletAddress: string): Promise<string> {
-    try {
-      // Get available actions
-      const actions = this.agentKit.getActions();
-      const balanceAction = actions.find(
-        (a) => a.name === "ERC20ActionProvider_get_balance",
-      );
-
-      if (!balanceAction) {
-        throw new Error("Balance action not found");
-      }
-
-      // Get USDC contract address for current network
-      const usdcAddress =
-        this.USDC_CONTRACTS[
-          this.config.networkId as keyof typeof this.USDC_CONTRACTS
-        ];
-      if (!usdcAddress) {
-        throw new Error(
-          `No USDC contract address configured for network: ${this.config.networkId}`,
-        );
-      }
-
-      // Get USDC balance using invoke
-      const balance = await balanceAction.invoke({
-        args: {
-          wallet: walletAddress,
-          contractAddress: usdcAddress,
-        },
-      });
-
-      return balance.toString();
-    } catch (error) {
-      console.error("Error getting USDC balance:", error);
-      throw new Error("Failed to get USDC balance");
-    }
-  }
 }
 
 // Initialize the service with environment variables
@@ -267,9 +154,9 @@ const coinbaseService = new CoinbaseService({
   apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY!,
 });
 
-// Initialize the service when it's created
+// Initialize the service on startup
 coinbaseService.initialize().catch((error) => {
-  console.error("Failed to initialize CoinbaseService:", error);
+  console.error("❌ Failed to initialize CoinbaseService:", error);
 });
 
 export default coinbaseService;
