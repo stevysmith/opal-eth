@@ -4,32 +4,29 @@ import { useWizard } from "@/hooks/use-wizard";
 export function WizardNav() {
   const [location] = useLocation();
   const { formData } = useWizard();
-  // Convert the current location to a relative path
   const relativePath = location.replace("/wizard", "") || "/";
 
-  // Define base steps
-  let steps = [
+  // Define all possible steps
+  const steps = [
     { path: "/", label: "Template" },
     { path: "/persona", label: "Persona" },
-  ];
-
-  // Add graph config step if template is graph_notify
-  if (formData.template === "graph_notify") {
-    steps.push({ path: "/graph-config", label: "Analytics" });
-  }
-
-  // Add platform and review steps
-  steps = [
-    ...steps,
+    { 
+      path: "/graph-config", 
+      label: "Analytics", 
+      showIf: () => formData && typeof formData.template === "string" && formData.template === "graph_notify"
+    },
     { path: "/platform", label: "Platform" },
     { path: "/review", label: "Review" },
   ];
 
+  // Filter steps based on conditions
+  const visibleSteps = steps.filter(step => !step.showIf || step.showIf());
+
   return (
     <nav className="flex gap-2">
-      {steps.map((step, i) => {
+      {visibleSteps.map((step, i) => {
         const isActive = relativePath === step.path;
-        const isPast = steps.findIndex(s => s.path === relativePath) > i;
+        const isPast = visibleSteps.findIndex(s => s.path === relativePath) > i;
 
         return (
           <Link key={step.path} href={`/wizard${step.path}`}>

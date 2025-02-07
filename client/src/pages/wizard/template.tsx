@@ -36,15 +36,14 @@ type TemplateId = (typeof templates)[number]["id"];
 
 export default function TemplateStep() {
   const { formData, setFormData } = useWizard();
-  const [selected, setSelected] = useState<TemplateId | "">(
-    formData.template as TemplateId || ""
+  const [selected, setSelected] = useState<TemplateId | null>(
+    formData?.template as TemplateId || null
   );
   const [, navigate] = useLocation();
 
   const handleContinue = () => {
     if (selected) {
       setFormData({ ...formData, template: selected });
-      // Always go to persona first
       navigate("/wizard/persona");
     }
   };

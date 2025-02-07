@@ -25,25 +25,24 @@ import { useWizard } from "@/hooks/use-wizard";
 const graphConfigSchema = z.object({
   queryType: z.enum(["pool_stats", "volume_stats", "global_stats"]),
   schedule: z.enum(["hourly", "daily", "weekly"]),
-  poolAddress: z.string().min(1, "Pool address is required").optional(),
-  timeRange: z.enum(["24h", "7d", "30d"]).optional(),
+  poolAddress: z.string().min(42, "Pool address must be 42 characters").optional(),
+  timeRange: z.enum(["24h", "7d", "30d"]),
   topN: z.coerce.number().min(1).max(100).optional(),
 });
 
-type GraphConfigFormData = z.infer<typeof graphConfigSchema>;
+type FormData = z.infer<typeof graphConfigSchema>;
 
 export default function GraphConfigStep() {
   const [, navigate] = useLocation();
   const { formData, setFormData } = useWizard();
 
-  const form = useForm<GraphConfigFormData>({
+  const form = useForm<FormData>({
     resolver: zodResolver(graphConfigSchema),
     defaultValues: {
-      queryType: formData.graphConfig?.queryType as "pool_stats" | "volume_stats" | "global_stats" || "pool_stats",
+      queryType: "pool_stats",
       schedule: "daily",
-      poolAddress: formData.graphConfig?.queryConfig?.poolAddress,
-      timeRange: (formData.graphConfig?.queryConfig?.timeRange as "24h" | "7d" | "30d") || "24h",
-      topN: formData.graphConfig?.queryConfig?.topN || 3,
+      timeRange: "24h",
+      topN: 3,
     },
   });
 
