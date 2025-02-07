@@ -1,0 +1,79 @@
+AgentKit by Coinbase Developer Platform allows anyone to give their AI agents access to a crypto wallet and onchain interactions with a comprehensive set of actions and plug-and-play integrations with top frameworks. Allow your agents to send USDC fee-free, deploy custom smart contracts and tokens, or interact in the wide world of DeFi.
+CDP SDK is a powerful tool for programmatic blockchain access through easy-to-use APIs. It allows builders to create onchain applications without worrying about the intricacies of blockchain development.
+Onramp allows you to easily onboard fiat into crypto using Apple Pay and common payment mechanisms, while Coinbase Commerces lets merchants easily accept crypto.
+Use the MPC Wallet APIs to create programmable, secure, and powerful experiences that abstract wallet interaction away from users, perform complex orchestration tasks, and facilitate onchain AI agent execution.
+Prizes
+🤯 Most Innovative Use of AgentKit ⸺ $7,500
+🥇
+1st place
+$5,000
+🥈
+2nd place
+$1,500
+🥉
+3rd place
+$1,000
+Your goal is to use the AgentKit to create innovative, unique experiences that push the status quo of what’s possible using onchain apps. We’re looking for projects with practical value that leverage the benefits of being onchain, the programmability of MPC Wallets, and the customizability enabled through streamlined API calls. Feel free to integrate other CDP tools!
+See the "Links to Documentation & Resources" section for helpful info
+Qualification Requirements
+Effective use of AgentKit
+Innovation and creativity in solving real-world problems
+Even more bonus points for creating a Replit Template or composable building blocks that other devs can use in their implementation!
+
+🛠️ Best Agent project using other CDP Tools ⸺ $1,500
+Integrate with CDP tooling like Onramp, Commerce, Smart Wallets, and OnchainKit to easily create experiences so seamless that your users don’t even realize they’re onchain.
+See the "Links to Documentation & Resources" section for helpful info
+Qualification Requirements
+Integrate at least two other CDP products in a meaningful way to be eligible
+
+🔵 Best Combination of AgentKit and OnchainKit ⸺ $1,500
+Use the frontend OnchainKit components alongside the backend CDP SDK or AgentKit to build powerful experience with minimal development effort.
+Qualification Requirements
+Use the AgentKit (optionally CDP SDK) and OCK together in a synergistic manner.
+We’d like to see more than just connecting a wallet and using the MPC Wallet API
+Bonus points for integrating the Fund and Checkout components
+
+📖 Best AgentKit documentation improvement ⸺ $500
+Improve our documentation by suggesting and writing solution guides, tutorials, cookbooks, and tutorials for potential inclusion in our official docs. We’re specifically looking for documentation detailing:
+Qualification Requirements
+Include with your submission a .md or .txt file per docs page
+See wishlist.md in our AgentKit repo for more information
+
+🫶 Best AgentKit Contributions ⸺ $3,000
+🥇
+1st place
+$1,500
+🥈
+2nd place
+$1,000
+🥉
+3rd place
+$500
+Best contributions to our open-source AgentKit repos. Some examples include integrations with agent frameworks, new actions within AgentKit for onchain functionality.
+See the contribution wishlist (wishlist.md) in the GitHub repo for inspiration
+Qualification Requirements
+Ideally you submit a GH Issue in the AgentKit repo with a feature request / proposal and then a series of smaller PRs (actions for example) that fulfill the GH Issue outline
+Include in your EthGlobal submission a link to your Issue
+
+📱 Viral Consumer app award ⸺ $1,500
+This award will go to the app that stands the best chance of going viral and blowing away the general public with the capabilities of AI agents with crypto rails.
+Example ideas:
+Byte AI’s integration with restaurants to have agents order food
+Agent that performs day-to-day tasks for you
+Completely abstract away crypto using natural language
+Qualification Requirements
+Having a working demo that is ideally publicly accessible to be eligible for this prize
+
+🤖 AgentKit Pool Prize ⸺ $3,000
+Split evenly between all qualifying projects
+We believe AgentKit is the best way to give every AI agent, regardless of its framework, model, or structure, access to a crypto wallet and onchain interactions.
+Similarly, any protocols or builders who add their actions to the AgentKit repo get the opportunity to be at the forefront of the agentic crypto wave, and offer their protocols a new distribution and interaction paradigm. Instead of users having to manually find their site, they can interact with an agent using natural language with simple terms, completely abstracting away the complex user experience.
+Build one of these agents and show us that we're right!
+Qualification Requirements
+Build with AgentKit in a meaningful way for the Agentic Ethereum hackathon to be eligible
+
+💸 Agentic Payments Prize ⸺ $1,500
+Build the future of programmatic/agentic payments by integrating with Coinbase Commerce and/or Coinbase Onramp.
+At Coinbase Developer Platform, we believe the future of payments is onchain, and we want you to prove us right. Build an elegant platform showcasing the power of onchain, permissionless, instant & nearly-free payments.
+Qualification Requirements
+Integrate with either Coinbase Commerce or Onramp to facilitate a payments use case
