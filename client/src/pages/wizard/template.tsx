@@ -37,14 +37,19 @@ type TemplateId = (typeof templates)[number]["id"];
 export default function TemplateStep() {
   const { formData, setFormData } = useWizard();
   const [selected, setSelected] = useState<TemplateId | "">(
-    (formData.template as TemplateId) || ""
+    formData.template as TemplateId || ""
   );
   const [, navigate] = useLocation();
 
   const handleContinue = () => {
     if (selected) {
       setFormData({ ...formData, template: selected });
-      navigate("/wizard/persona");
+      // Route to graph-config for graph_notify template, otherwise go to persona
+      if (selected === "graph_notify") {
+        navigate("/wizard/graph-config");
+      } else {
+        navigate("/wizard/persona");
+      }
     }
   };
 
@@ -57,7 +62,7 @@ export default function TemplateStep() {
         </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-6 md:grid-cols-2">
         {templates.map((template) => (
           <TemplateCard
             key={template.id}

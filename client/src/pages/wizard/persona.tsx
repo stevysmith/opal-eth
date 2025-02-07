@@ -46,7 +46,12 @@ export default function PersonaStep() {
         tone: data.tone
       }
     });
-    navigate("/wizard/platform");
+    // Navigate to platform or graph-config based on template
+    if (formData.template === "graph_notify") {
+      navigate("/wizard/graph-config");
+    } else {
+      navigate("/wizard/platform");
+    }
   });
 
   return (
