@@ -25,7 +25,7 @@ import { useWizard } from "@/hooks/use-wizard";
 const graphConfigSchema = z.object({
   queryType: z.enum(["pool_stats", "volume_stats", "global_stats"]),
   schedule: z.enum(["hourly", "daily", "weekly"]),
-  poolAddress: z.string().optional(),
+  poolAddress: z.string().min(1, "Pool address is required").optional(),
   timeRange: z.enum(["24h", "7d", "30d"]).optional(),
   topN: z.coerce.number().min(1).max(100).optional(),
 });
@@ -39,10 +39,11 @@ export default function GraphConfigStep() {
   const form = useForm<GraphConfigFormData>({
     resolver: zodResolver(graphConfigSchema),
     defaultValues: {
-      queryType: "pool_stats",
+      queryType: formData.graphConfig?.queryType as "pool_stats" | "volume_stats" | "global_stats" || "pool_stats",
       schedule: "daily",
-      timeRange: "24h",
-      topN: 3,
+      poolAddress: formData.graphConfig?.queryConfig?.poolAddress,
+      timeRange: (formData.graphConfig?.queryConfig?.timeRange as "24h" | "7d" | "30d") || "24h",
+      topN: formData.graphConfig?.queryConfig?.topN || 3,
     },
   });
 
@@ -150,6 +151,7 @@ export default function GraphConfigStep() {
                       <Input
                         placeholder="e.g. 0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8"
                         {...field}
+                        value={field.value || ""}
                       />
                     </FormControl>
                     <FormDescription>
