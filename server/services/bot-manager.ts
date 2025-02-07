@@ -676,15 +676,18 @@ class BotManager {
       bot.command('start', async (ctx) => {
         console.log(`[Bot ${agent.id}] Processing /start command`);
         try {
-          await ctx.reply(
-            "👋 Welcome to OpalGraphBot!\n\n" +
-            "I can help you analyze DeFi data from Uniswap. Just ask me questions like:\n" +
-            "• What's the current trading volume?\n" +
-            "• How many pools are active?\n" +
-            "• What's the total value locked?\n\n" +
-            "Try asking a question now! 📊"
-          );
-          console.log(`[Bot ${agent.id}] Successfully sent welcome message`);
+          // Only respond to direct messages
+          if (ctx.chat?.type === 'private') {
+            await ctx.reply(
+              "👋 Welcome to OpalGraphBot!\n\n" +
+              "I can help you analyze DeFi data from Uniswap. Just ask me questions like:\n" +
+              "• What's the current trading volume?\n" +
+              "• How many pools are active?\n" +
+              "• What's the total value locked?\n\n" +
+              "Try asking a question now! 📊"
+            );
+            console.log(`[Bot ${agent.id}] Successfully sent welcome message`);
+          }
         } catch (error) {
           console.error(`[Bot ${agent.id}] Error sending welcome message:`, error);
           throw error;
@@ -692,6 +695,10 @@ class BotManager {
       });
 
       bot.on('text', async (ctx) => {
+        // Only process messages in private chats
+        if (ctx.chat?.type !== 'private') {
+          return;
+        }
         try {
           console.log(`[Bot ${agent.id}] Received text message:`, {
             text: ctx.message.text,
