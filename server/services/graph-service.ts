@@ -5,40 +5,16 @@ import { db } from "@db";
 import { graphNotifications } from "@db/schema";
 import { eq } from "drizzle-orm";
 
-// Documentation for Graph Integration
-/**
- * Graph Integration Details
- * Subgraph: Uniswap V3 Analytics
- * Deployment URL: https://thegraph.com/hosted-service/subgraph/uniswap/uniswap-v3
- * 
- * Implementation Features:
- * 1. Real-time DeFi analytics using The Graph protocol
- * 2. AI-powered query generation and response formatting
- * 3. Advanced error handling with retries
- * 4. Automated notifications for key DeFi metrics
- * 
- * Key Query Types:
- * - Pool Statistics (Volume, Liquidity, Fees)
- * - Volume Analytics (Historical and Real-time)
- * - Token Metrics (Price, Volume, Liquidity)
- * - Liquidity Analysis (Positions, Concentrations)
- * - Market Trends (Price Movements, Volume Patterns)
- */
-
-const GRAPH_API_URL = "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3";
+const GRAPH_API_URL =
+  "https://gateway-arbitrum.network.thegraph.com/api/7ad5dec0c95579e6812957254486d013/subgraphs/id/HUZDsRpEVP2AvzDCyzDHtdc64dyDxx8FQjzsmqSg4H3B";
 
 // Initialize OpenAI
+// the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Enhanced error handling for type safety
-interface GraphError extends Error {
-  message: string;
-  stack?: string;
-}
-
-// Helper function to add retry logic for Graph queries with improved error typing
+// Helper function to add retry logic for Graph queries
 async function retryRequest(queryFn: () => Promise<any>, maxRetries = 3): Promise<any> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -47,16 +23,16 @@ async function retryRequest(queryFn: () => Promise<any>, maxRetries = 3): Promis
         query: queryFn.toString()
       });
       return await queryFn();
-    } catch (error: unknown) {
-      const graphError = error as GraphError;
+    } catch (error) {
       console.error("[GraphService] Query error:", {
         attempt,
-        error: graphError.message,
-        stack: graphError.stack
+        error: error.message,
+        stack: error.stack
       });
-      if (attempt === maxRetries || !graphError.message?.includes("indexers")) {
+      if (attempt === maxRetries || !error.message?.includes("indexers")) {
         throw error;
       }
+      // Wait before retrying, with exponential backoff
       await new Promise(resolve => setTimeout(resolve, attempt * 1000));
     }
   }
@@ -75,18 +51,17 @@ export class GraphService {
         return "⚠️ Unable to fetch DeFi statistics at the moment. The network may be experiencing temporary issues. Please try again in a few minutes.";
       }
 
-      // Enhanced prompt for more detailed and structured analysis
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
             content:
-              "You are a DeFi analytics expert that creates detailed, structured updates about Uniswap pool activity. Format your response as a JSON object with a 'message' field containing the formatted message. Use markdown formatting, emojis, and clear sections to present the information effectively. Include percentage changes and highlight significant movements.",
+              "You are a DeFi analytics expert that creates concise, informative updates about Uniswap pool activity. Format your response as a JSON object with a 'message' field containing the formatted message. Use emojis and bullet points to make the information clear and readable.",
           },
           {
             role: "user",
-            content: `Please provide a comprehensive analysis of this DeFi data with key metrics, trends, and notable changes: ${JSON.stringify(data, null, 2)}`,
+            content: `Please analyze this DeFi data and return a JSON formatted response with key metrics and changes: ${JSON.stringify(data, null, 2)}`,
           },
         ],
         response_format: { type: "json_object" },
@@ -104,107 +79,10 @@ export class GraphService {
     }
   }
 
-  // Added: Historical volume analysis with time-weighted metrics
-  async getHistoricalVolumeAnalysis(timeframe: '24h' | '7d' | '30d') {
-    const daysAgo = timeframe === '24h' ? 1 : timeframe === '7d' ? 7 : 30;
-    const timestamp = Math.floor(Date.now() / 1000) - (daysAgo * 24 * 60 * 60);
-
-    const query = gql`
-      query getHistoricalVolume($timestamp: Int!) {
-        uniswapDayDatas(
-          where: { date_gt: $timestamp }
-          orderBy: date
-          orderDirection: desc
-        ) {
-          date
-          volumeUSD
-          volumeETH
-          feesUSD
-          tvlUSD
-          txCount
-        }
-      }
-    `;
-
-    return retryRequest(() => request(GRAPH_API_URL, query, { timestamp }));
-  }
-
-  // Added: Liquidity concentration analysis
-  async getLiquidityConcentration(poolAddress: string) {
-    const query = gql`
-      query getLiquidityConcentration($poolAddress: String!) {
-        pool(id: $poolAddress) {
-          tick
-          feeTier
-          liquidity
-          sqrtPrice
-          token0Price
-          token1Price
-          ticks(first: 1000, orderBy: tickIdx) {
-            tickIdx
-            liquidityNet
-            liquidityGross
-            price0
-            price1
-          }
-        }
-      }
-    `;
-
-    return retryRequest(() => request(GRAPH_API_URL, query, { poolAddress: poolAddress.toLowerCase() }));
-  }
-
-  // Added: Market trend analysis with price impact
-  async getMarketTrendAnalysis(poolAddress: string, timeframe: '24h' | '7d') {
-    const hoursAgo = timeframe === '24h' ? 24 : 168;
-    const timestamp = Math.floor(Date.now() / 1000) - (hoursAgo * 60 * 60);
-
-    const query = gql`
-      query getMarketTrends($poolAddress: String!, $timestamp: Int!) {
-        pool(id: $poolAddress) {
-          token0 {
-            symbol
-            decimals
-          }
-          token1 {
-            symbol
-            decimals
-          }
-          swaps(
-            first: 1000
-            orderBy: timestamp
-            where: { timestamp_gt: $timestamp }
-          ) {
-            timestamp
-            amount0
-            amount1
-            amountUSD
-          }
-          poolDayData(
-            first: ${timeframe === '24h' ? '24' : '7'}
-            orderBy: date
-            orderDirection: desc
-          ) {
-            date
-            volumeUSD
-            tvlUSD
-            token0Price
-            token1Price
-          }
-        }
-      }
-    `;
-
-    return retryRequest(() => request(GRAPH_API_URL, query, {
-      poolAddress: poolAddress.toLowerCase(),
-      timestamp
-    }));
-  }
-
   async generateGraphQuery(userQuestion: string): Promise<string> {
     try {
       console.log("[GraphService] Generating query for question:", userQuestion);
-
+      
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
@@ -218,15 +96,15 @@ export class GraphService {
               }
             }
 
-            Available entities and fields:
-            - Factory: poolCount, txCount, totalVolumeUSD, totalVolumeETH, totalFeesUSD, totalValueLockedUSD
-            - Pool: token0{symbol,name}, token1{symbol,name}, feeTier, liquidity, volumeUSD, totalValueLockedUSD
-            - Token: symbol, name, volume, volumeUSD, totalValueLocked, poolCount, txCount
-            - Swap: timestamp, amount0, amount1, amountUSD
-            - UniswapDayData: volumeUSD, volumeETH, feesUSD, txCount, tvlUSD
-            - PoolDayData: pool{id}, volumeUSD, tvlUSD, token0Price, token1Price
+Available entities and fields:
+- Factory: poolCount, txCount, totalVolumeUSD, totalVolumeETH, totalFeesUSD, totalValueLockedUSD
+- Pool: token0{symbol,name}, token1{symbol,name}, feeTier, liquidity, volumeUSD, totalValueLockedUSD
+- Token: symbol, name, volume, volumeUSD, totalValueLocked, poolCount, txCount
+- Swap: timestamp, amount0, amount1, amountUSD
+- UniswapDayData: volumeUSD, volumeETH, feesUSD, txCount, tvlUSD
+- PoolDayData: pool{id}, volumeUSD, tvlUSD, token0Price, token1Price
 
-            Return only the GraphQL query string, no explanations or JSON wrapper.`
+Return only the GraphQL query string, no explanations or JSON wrapper.`
           },
           {
             role: "user",
@@ -236,26 +114,26 @@ export class GraphService {
       });
 
       let query = response.choices[0]?.message?.content || "";
-
+      
       // Clean up the query
       query = query.trim();
-
+      
       // Log the generated query
       console.log("[GraphService] Raw generated query:", query);
-
+      
       // Add factory ID if missing
       if (query.includes('factory {') && !query.includes('factory(id:')) {
         query = query.replace('factory {', 'factory(id: "0x1F98431c8aD98523631AE4a59f267346ea31F984") {');
       }
-
+      
       // Validate query structure
       if (!query.startsWith('{') || !query.endsWith('}')) {
         console.error("[GraphService] Invalid query structure:", query);
         throw new Error("Generated query is not properly formatted");
       }
-
+      
       console.log("[GraphService] Final processed query:", query);
-
+      
       return query;
     } catch (error) {
       console.error("Error generating GraphQL query:", error);
@@ -375,17 +253,7 @@ export class GraphService {
           data = await this.getPoolStats(config.poolAddress);
           break;
         case "volume_stats":
-          if (config.timeRange) {
-            data = await this.getHistoricalVolumeAnalysis(config.timeRange);
-          } else {
-            data = await this.getTopPools(config.topN);
-          }
-          break;
-        case "market_trends":
-          data = await this.getMarketTrendAnalysis(config.poolAddress, config.timeRange);
-          break;
-        case "liquidity_analysis":
-          data = await this.getLiquidityConcentration(config.poolAddress);
+          data = await this.getTopPools(config.topN);
           break;
         case "global_stats":
           data = await this.getGlobalStats();
@@ -395,7 +263,7 @@ export class GraphService {
       }
 
       const formattedMessage = await this.formatPoolStats(data);
-      await this.bot.telegram.sendMessage(channelId, formattedMessage, { parse_mode: 'Markdown' });
+      await this.bot.telegram.sendMessage(channelId, formattedMessage);
 
       // Update last run time
       await db
