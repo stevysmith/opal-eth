@@ -687,15 +687,13 @@ class BotManager {
 
       // Fetch real analytics data
       console.log(`[Bot ${agentId}] Fetching analytics data...`);
-      const [globalStats, topPools] = await Promise.all([
-        this.graphService.getGlobalStats(),
-        this.graphService.getTopPools(3)
-      ]);
+      console.log(`[Bot ${agentId}] Calling getGlobalStats...`);
+      const globalStats = await this.graphService.getGlobalStats();
+      console.log(`[Bot ${agentId}] Global stats response:`, globalStats);
 
       // Format the data using OpenAI for insights
       const message = await this.graphService.formatPoolStats({
-        global: globalStats,
-        topPools: topPools
+        global: globalStats
       });
 
       // Send the formatted analytics update

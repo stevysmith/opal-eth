@@ -56,8 +56,17 @@ const formatPoolStats = async (data: any) => {
 async function retryRequest(queryFn: () => Promise<any>, maxRetries = 3): Promise<any> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
+      console.log("[GraphService] Executing GraphQL query:", {
+        attempt,
+        query: queryFn.toString()
+      });
       return await queryFn();
     } catch (error) {
+      console.error("[GraphService] Query error:", {
+        attempt,
+        error: error.message,
+        stack: error.stack
+      });
       if (attempt === maxRetries || !error.message?.includes("indexers")) {
         throw error;
       }
@@ -155,6 +164,7 @@ export class GraphService {
       }
     `;
 
+    console.log("[GraphService] Executing getGlobalStats with query:", query);
     return retryRequest(() => request(GRAPH_API_URL, query));
   }
 
