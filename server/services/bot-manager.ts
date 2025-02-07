@@ -138,7 +138,7 @@ class BotManager {
           } else if (agent.template === "giveaway") {
             this.setupGiveawayCommands(bot, agentId);
           } else if (agent.template === "qa") {
-            this.setupQACommands(bot, agentId);
+            this.setupQACommands(bot, agent);
           }
 
           try {
@@ -649,12 +649,52 @@ class BotManager {
     console.log(`[Bot ${agentId}] Command handlers registration completed`);
   };
 
-  private setupQACommands(bot: Telegraf<Context<Update>>, agentId: number) {
-    bot.on("text", (ctx) => {
-      const message = ctx.message.text;
-      console.log(`Q&A Bot ${agentId} received: ${message}`);
-      ctx.reply("Thank you for your question! It has been logged.");
-    });
+  private setupQACommands(bot: Telegraf<Context<Update>>, agent: any) { // Added 'any' type for agent
+    const template = agent.template;
+
+    if (template === 'graph_notify') {
+      bot.on('text', async (ctx) => {
+        try {
+          const question = ctx.message.text;
+          console.log(`[Bot ${agent.id}] Received analytics question:`, question);
+
+          // First send a processing message
+          const processingMsg = await ctx.reply("🔄 Processing your question about DeFi analytics...");
+
+          try {
+            // Execute the query generated from the user's question
+            const data = await this.graphService.executeUserQuery(question);
+            console.log(`[Bot ${agent.id}] Query result:`, data);
+
+            // Format the response
+            const message = await this.graphService.formatPoolStats(data);
+
+            // Send the formatted response
+            await ctx.reply(message);
+          } catch (error) {
+            console.error(`[Bot ${agent.id}] Error processing analytics question:`, error);
+            await ctx.reply("❌ I couldn't process that question. Please try rephrasing it or ask about specific metrics like volume, liquidity, or transaction counts.");
+          }
+
+          // Clean up processing message
+          try {
+            await ctx.deleteMessage(processingMsg.message_id);
+          } catch (error) {
+            console.error(`[Bot ${agent.id}] Error deleting processing message:`, error);
+          }
+        } catch (error) {
+          console.error(`[Bot ${agent.id}] Error in message handler:`, error);
+          ctx.reply("An error occurred while processing your request.");
+        }
+      });
+    } else {
+      // Original QA behavior for other templates
+      bot.on("text", (ctx) => {
+        const message = ctx.message.text;
+        console.log(`Q&A Bot ${agent.id} received: ${message}`);
+        ctx.reply("Thank you for your question! It has been logged.");
+      });
+    }
   }
 
   async sendAnalyticsUpdate(agentId: number): Promise<boolean> {

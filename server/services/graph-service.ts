@@ -47,7 +47,6 @@ export class GraphService {
 
   async formatPoolStats(data: any) {
     try {
-      // If data is empty or undefined, return an error message
       if (!data || (typeof data === 'object' && Object.keys(data).length === 0)) {
         return "⚠️ Unable to fetch DeFi statistics at the moment. The network may be experiencing temporary issues. Please try again in a few minutes.";
       }
@@ -58,29 +57,69 @@ export class GraphService {
           {
             role: "system",
             content:
-              "You are a DeFi analytics expert that creates concise, informative updates about Uniswap pool activity. Format your response as a JSON object with a 'message' field containing the formatted message. Include emojis and bullet points in your message.",
+              "You are a DeFi analytics expert that creates concise, informative updates about Uniswap pool activity. Format your response as a JSON object with a 'message' field containing the formatted message. For text formatting in Telegram, use _text_ for italics and __text__ for bold. Include emojis and bullet points. The message will be sent to a Telegram channel.",
           },
           {
             role: "user",
-            content: `Please analyze this DeFi data and return a JSON formatted response with key metrics and changes: ${JSON.stringify(data, null, 2)}`,
+            content: `Please analyze this DeFi data and return a JSON formatted response with key metrics and changes, formatted for Telegram: ${JSON.stringify(data, null, 2)}`,
           },
         ],
         response_format: { type: "json_object" },
       });
 
-      // Parse the JSON response and format it for Telegram
       const aiResponse = JSON.parse(response.choices[0]?.message?.content || "{}");
       return aiResponse.message || "Error formatting message";
     } catch (error) {
       console.error("Error formatting pool stats:", error);
-      // More descriptive fallback message
       if (error.message?.includes("indexers")) {
         return "🔄 The DeFi analytics service is currently syncing with the latest blockchain data. Please try again in a few minutes.";
       }
-      // Fallback to basic formatting if AI fails
       const stats = data.factory || data.pool || data.pools;
       return `📊 DeFi Analytics Update\n\n${JSON.stringify(stats, null, 2)}`;
     }
+  }
+
+  async generateGraphQuery(userQuestion: string): Promise<string> {
+    try {
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `You are a DeFi data expert that converts natural language questions into GraphQL queries for the Uniswap v3 subgraph. Return only valid GraphQL queries based on this schema:
+
+Available entities and key fields:
+- Factory: poolCount, txCount, totalVolumeUSD, totalVolumeETH
+- Pool: token0, token1, feeTier, liquidity, volumeUSD, totalValueLockedUSD
+- Token: symbol, name, volume, volumeUSD, totalValueLocked
+- Swap: timestamp, amount0, amount1, amountUSD
+
+Format response as a JSON object with a 'query' field containing the GraphQL query.`
+          },
+          {
+            role: "user", 
+            content: userQuestion
+          }
+        ],
+        response_format: { type: "json_object" },
+      });
+
+      const aiResponse = JSON.parse(response.choices[0]?.message?.content || "{}");
+      return aiResponse.query || "Error generating query";
+    } catch (error) {
+      console.error("Error generating GraphQL query:", error);
+      throw new Error("Failed to generate query from question");
+    }
+  }
+
+  async executeUserQuery(userQuestion: string): Promise<any> {
+    const query = await this.generateGraphQuery(userQuestion);
+    console.log("[GraphService] Generated query from question:", { 
+      question: userQuestion,
+      query 
+    });
+
+    return retryRequest(() => request(GRAPH_API_URL, query));
   }
 
   async getPoolStats(poolAddress: string) {
