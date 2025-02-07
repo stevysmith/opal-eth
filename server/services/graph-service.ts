@@ -9,6 +9,7 @@ const GRAPH_API_URL =
   "https://gateway-arbitrum.network.thegraph.com/api/7ad5dec0c95579e6812957254486d013/subgraphs/id/HUZDsRpEVP2AvzDCyzDHtdc64dyDxx8FQjzsmqSg4H3B";
 
 // Initialize OpenAI
+// the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
@@ -16,24 +17,29 @@ const openai = new OpenAI({
 const formatPoolStats = async (data: any) => {
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",  // Updated to use gpt-4o-mini model
+      model: "gpt-4o",
       messages: [
         {
           role: "system",
           content:
-            "You are a DeFi analytics expert that creates concise, informative updates about Uniswap pool activity.",
+            "You are a DeFi analytics expert that creates concise, informative updates about Uniswap pool activity. Format the response to be easily readable in a Telegram message with emojis and bullet points. Include insights about changes and trends when possible.",
         },
         {
           role: "user",
-          content: `Format the following Uniswap pool data into a clear, concise message suitable for a Telegram channel. Include key metrics and any notable changes: ${JSON.stringify(data, null, 2)}`,
+          content: `Analyze and summarize the following DeFi data in a clear, informative way that highlights key metrics and notable changes. Data: ${JSON.stringify(data, null, 2)}`,
         },
       ],
+      response_format: { type: "json_object" },
     });
 
-    return response.choices[0]?.message?.content || "Error formatting message";
+    // Parse the JSON response and format it for Telegram
+    const aiResponse = JSON.parse(response.choices[0]?.message?.content || "{}");
+    return aiResponse.message || "Error formatting message";
   } catch (error) {
     console.error("Error formatting pool stats:", error);
-    return JSON.stringify(data, null, 2);
+    // Fallback to basic formatting if AI fails
+    const stats = data.factory || data.pool || data.pools;
+    return `📊 DeFi Analytics Update\n\n${JSON.stringify(stats, null, 2)}`;
   }
 };
 
@@ -53,11 +59,23 @@ export class GraphService {
           feeTier
           liquidity
           volumeUSD
+          totalValueLockedUSD
+          volumeToken0
+          volumeToken1
           token0 {
             symbol
+            name
+            totalValueLockedUSD
           }
           token1 {
             symbol
+            name
+            totalValueLockedUSD
+          }
+          poolDayData(first: 2, orderBy: date, orderDirection: desc) {
+            volumeUSD
+            tvlUSD
+            date
           }
         }
       }
@@ -70,17 +88,31 @@ export class GraphService {
     return request(GRAPH_API_URL, query, variables);
   }
 
-  async getTopPools(limit: number = 3) {
+  async getTopPools(limit: number = 5) {
     const query = gql`
       query getTopPools($limit: Int!) {
-        pools(first: $limit, orderBy: volumeUSD, orderDirection: desc) {
+        pools(
+          first: $limit
+          orderBy: volumeUSD
+          orderDirection: desc
+          where: { volumeUSD_gt: "0" }
+        ) {
           id
           volumeUSD
+          totalValueLockedUSD
+          token0Price
+          token1Price
           token0 {
             symbol
+            name
           }
           token1 {
             symbol
+            name
+          }
+          poolDayData(first: 1, orderBy: date, orderDirection: desc) {
+            volumeUSD
+            tvlUSD
           }
         }
       }
@@ -94,9 +126,16 @@ export class GraphService {
       {
         factory(id: "0x1F98431c8aD98523631AE4a59f267346ea31F984") {
           poolCount
-          txCount
+          totalValueLockedUSD
           totalVolumeUSD
-          totalVolumeETH
+          txCount
+          # Get last 2 days of data for trend analysis
+          factoryDayData(first: 2, orderBy: date, orderDirection: desc) {
+            volumeUSD
+            tvlUSD
+            txCount
+            date
+          }
         }
       }
     `;
@@ -140,6 +179,7 @@ export class GraphService {
         .where(eq(graphNotifications.id, notification.id));
     } catch (error) {
       console.error("Error sending notification:", error);
+      throw error; // Propagate error to caller
     }
   }
 }
