@@ -21,34 +21,23 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useWizard } from "@/hooks/use-wizard";
-import { useToast } from "@/hooks/use-toast";
 
+// Define validation schemas
 const queryTypeSchema = z.enum(["pool_stats", "volume_stats", "global_stats"]);
-
-const scheduleSchema = z.enum(["hourly", "daily", "weekly"]).transform((val) => {
-  switch (val) {
-    case "hourly":
-      return "0 * * * *";
-    case "daily":
-      return "0 0 * * *";
-    case "weekly":
-      return "0 0 * * 0";
-  }
-});
+const scheduleSchema = z.enum(["hourly", "daily", "weekly"]);
+const timeRangeSchema = z.enum(["24h", "7d", "30d"]);
 
 const graphConfigSchema = z.object({
   queryType: queryTypeSchema,
   schedule: scheduleSchema,
-  // For pool stats
   poolAddress: z.string().optional(),
-  timeRange: z.enum(["24h", "7d", "30d"]).default("24h"),
-  // For volume stats
-  topN: z.number().min(1).max(100).default(3),
+  timeRange: timeRangeSchema.optional(),
+  topN: z.number().min(1).max(100).optional(),
 });
 
-type GraphConfigFormData = z.input<typeof graphConfigSchema>;
+type GraphConfigFormData = z.infer<typeof graphConfigSchema>;
 
-interface WizardFormData {
+type WizardFormData = {
   template?: string;
   graphConfig?: {
     queryType: string;
@@ -59,12 +48,17 @@ interface WizardFormData {
       topN?: number;
     };
   };
-}
+};
+
+const scheduleToPattern = {
+  hourly: "0 * * * *",
+  daily: "0 0 * * *",
+  weekly: "0 0 * * 0",
+};
 
 export default function GraphConfigStep() {
   const [, navigate] = useLocation();
   const { formData, setFormData } = useWizard<WizardFormData>();
-  const { toast } = useToast();
 
   const form = useForm<GraphConfigFormData>({
     resolver: zodResolver(graphConfigSchema),
@@ -82,14 +76,16 @@ export default function GraphConfigStep() {
     const queryConfig = {
       ...(data.queryType === "pool_stats"
         ? { poolAddress: data.poolAddress, timeRange: data.timeRange }
-        : { topN: data.topN, timeRange: data.timeRange }),
+        : data.queryType === "volume_stats"
+        ? { topN: data.topN, timeRange: data.timeRange }
+        : {}),
     };
 
     setFormData({
       ...formData,
       graphConfig: {
         queryType: data.queryType,
-        schedule: data.schedule,
+        schedule: scheduleToPattern[data.schedule],
         queryConfig,
       },
     });
@@ -167,78 +163,106 @@ export default function GraphConfigStep() {
           />
 
           {watchQueryType === "pool_stats" && (
-            <FormField
-              control={form.control}
-              name="poolAddress"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Pool Address</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="e.g. 0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    The Uniswap V3 pool address to monitor (e.g. ETH-USDC pool)
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-
-          {(watchQueryType === "pool_stats" || watchQueryType === "volume_stats") && (
-            <FormField
-              control={form.control}
-              name="timeRange"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Time Range</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    defaultValue={field.value}
-                  >
+            <>
+              <FormField
+                control={form.control}
+                name="poolAddress"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Pool Address</FormLabel>
                     <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select time range" />
-                      </SelectTrigger>
+                      <Input
+                        placeholder="e.g. 0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8"
+                        {...field}
+                      />
                     </FormControl>
-                    <SelectContent>
-                      <SelectItem value="24h">Last 24 Hours</SelectItem>
-                      <SelectItem value="7d">Last 7 Days</SelectItem>
-                      <SelectItem value="30d">Last 30 Days</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                    <FormDescription>
+                      The Uniswap V3 pool address to monitor (e.g. ETH-USDC pool)
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="timeRange"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Time Range</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select time range" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="24h">Last 24 Hours</SelectItem>
+                        <SelectItem value="7d">Last 7 Days</SelectItem>
+                        <SelectItem value="30d">Last 30 Days</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </>
           )}
 
           {watchQueryType === "volume_stats" && (
-            <FormField
-              control={form.control}
-              name="topN"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Number of Pools</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={100}
-                      {...field}
-                      onChange={(e) => field.onChange(parseInt(e.target.value))}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    How many top pools to include (1-100)
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <>
+              <FormField
+                control={form.control}
+                name="topN"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Number of Pools</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={100}
+                        {...field}
+                        onChange={(e) => field.onChange(parseInt(e.target.value))}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      How many top pools to include (1-100)
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="timeRange"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Time Range</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select time range" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="24h">Last 24 Hours</SelectItem>
+                        <SelectItem value="7d">Last 7 Days</SelectItem>
+                        <SelectItem value="30d">Last 30 Days</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </>
           )}
 
           <div className="flex justify-end gap-4">
