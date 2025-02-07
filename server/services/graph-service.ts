@@ -74,7 +74,6 @@ export class GraphService {
           }
           poolDayData(first: 2, orderBy: date, orderDirection: desc) {
             volumeUSD
-            tvlUSD
             date
           }
         }
@@ -112,7 +111,6 @@ export class GraphService {
           }
           poolDayData(first: 1, orderBy: date, orderDirection: desc) {
             volumeUSD
-            tvlUSD
           }
         }
       }
@@ -132,7 +130,6 @@ export class GraphService {
           # Get last 2 days of data for trend analysis
           factoryDayData(first: 2, orderBy: date, orderDirection: desc) {
             volumeUSD
-            tvlUSD
             txCount
             date
           }
