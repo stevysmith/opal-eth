@@ -127,12 +127,12 @@ export class GraphService {
           totalValueLockedUSD
           totalVolumeUSD
           txCount
-          # Get last 2 days of data for trend analysis
-          factoryDayData(first: 2, orderBy: date, orderDirection: desc) {
-            volumeUSD
-            txCount
-            date
-          }
+        }
+        uniswapDayDatas(first: 2, orderBy: date, orderDirection: desc) {
+          date
+          volumeUSD
+          tvlUSD
+          txCount
         }
       }
     `;
