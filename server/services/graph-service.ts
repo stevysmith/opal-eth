@@ -81,42 +81,60 @@ export class GraphService {
 
   async generateGraphQuery(userQuestion: string): Promise<string> {
     try {
+      console.log("[GraphService] Generating query for question:", userQuestion);
+      
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
-            content: `You are a DeFi data expert that converts natural language questions into GraphQL queries for the Uniswap v3 subgraph. Return only valid GraphQL queries based on this schema:
+            content: `You are a DeFi data expert. Generate a complete, valid GraphQL query for the Uniswap v3 subgraph that answers the user's question. For volume queries, use the factory entity with totalVolumeUSD field. Example query for volume:
+            {
+              factory(id: "0x1F98431c8aD98523631AE4a59f267346ea31F984") {
+                totalVolumeUSD
+                totalVolumeETH
+              }
+            }
 
-Available entities and key fields:
+Available entities and fields:
 - Factory: poolCount, txCount, totalVolumeUSD, totalVolumeETH, totalFeesUSD, totalValueLockedUSD
-- Pool: token0{symbol,name}, token1{symbol,name}, feeTier, liquidity, volumeUSD, totalValueLockedUSD, volumeToken0, volumeToken1
+- Pool: token0{symbol,name}, token1{symbol,name}, feeTier, liquidity, volumeUSD, totalValueLockedUSD
 - Token: symbol, name, volume, volumeUSD, totalValueLocked, poolCount, txCount
 - Swap: timestamp, amount0, amount1, amountUSD
 - UniswapDayData: volumeUSD, volumeETH, feesUSD, txCount, tvlUSD
-- PoolDayData: pool{id}, volumeUSD, tvlUSD, token0Price, token1Price, high, low, open, close
+- PoolDayData: pool{id}, volumeUSD, tvlUSD, token0Price, token1Price
 
-Use time-based queries with entities like UniswapDayData or PoolDayData for historical data. Sort with orderBy and orderDirection. Limit results with first parameter.
-
-Format response as a JSON object with a 'query' field containing the GraphQL query.`
+Return only the GraphQL query string, no explanations or JSON wrapper.`
           },
           {
             role: "user",
             content: userQuestion
           }
-        ],
-        response_format: { type: "json_object" },
+        ]
       });
 
-      const aiResponse = JSON.parse(response.choices[0]?.message?.content || "{}");
-      let query = aiResponse.query;
+      let query = response.choices[0]?.message?.content || "";
       
-      // Add factory ID if querying factory data
+      // Clean up the query
+      query = query.trim();
+      
+      // Log the generated query
+      console.log("[GraphService] Raw generated query:", query);
+      
+      // Add factory ID if missing
       if (query.includes('factory {') && !query.includes('factory(id:')) {
         query = query.replace('factory {', 'factory(id: "0x1F98431c8aD98523631AE4a59f267346ea31F984") {');
       }
       
-      return query || "Error generating query";
+      // Validate query structure
+      if (!query.startsWith('{') || !query.endsWith('}')) {
+        console.error("[GraphService] Invalid query structure:", query);
+        throw new Error("Generated query is not properly formatted");
+      }
+      
+      console.log("[GraphService] Final processed query:", query);
+      
+      return query;
     } catch (error) {
       console.error("Error generating GraphQL query:", error);
       throw new Error("Failed to generate query from question");
