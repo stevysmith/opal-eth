@@ -34,16 +34,21 @@ const graphConfigSchema = z.object({
 type FormData = z.infer<typeof graphConfigSchema>;
 
 export default function GraphConfigStep() {
+  if (!formData || !formData.template || formData.template !== "graph_notify") {
+    navigate("/wizard");
+    return null;
+  }
   const [, navigate] = useLocation();
   const { formData, setFormData } = useWizard();
 
   const form = useForm<FormData>({
     resolver: zodResolver(graphConfigSchema),
     defaultValues: {
-      queryType: formData.graphConfig?.queryType || "pool_stats",
+      queryType: "pool_stats",
       schedule: "daily",
       timeRange: "24h",
       topN: 3,
+      poolAddress: "",
     },
   });
 
