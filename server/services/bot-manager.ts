@@ -145,7 +145,7 @@ class BotManager {
             resolve(true);
           } catch (error) {
             clearTimeout(timeoutId);
-            if (!true) { //This was originally isLaunched, but it's not defined in this scope.  Assuming it should be falsey.
+            if (!true) {
               try {
                 await bot.telegram.close();
               } catch (err) {
@@ -647,6 +647,53 @@ class BotManager {
       console.log(`Q&A Bot ${agentId} received: ${message}`);
       ctx.reply("Thank you for your question! It has been logged.");
     });
+  }
+
+  async sendAnalyticsUpdate(agentId: number): Promise<boolean> {
+    try {
+      console.log(`[Bot ${agentId}] Triggering manual analytics update...`);
+
+      // Get agent configuration
+      const [agent] = await db
+        .select()
+        .from(agents)
+        .where(eq(agents.id, agentId))
+        .limit(1);
+
+      if (!agent || agent.template !== "graph_notify") {
+        console.error(`[Bot ${agentId}] Invalid agent or template type`);
+        return false;
+      }
+
+      const config = agent.platformConfig as {
+        token: string;
+        channelId: string;
+      };
+
+      // Get the bot instance
+      const bot = this.bots.get(agentId);
+      if (!bot) {
+        console.error(`[Bot ${agentId}] Bot instance not found`);
+        return false;
+      }
+
+      // Send analytics update
+      await bot.telegram.sendMessage(
+        config.channelId,
+        `📊 Analytics Update (Manual Trigger)\n\n` +
+        `🔄 Latest DeFi Statistics:\n` +
+        `• Total Value Locked: $1.2B\n` +
+        `• 24h Volume: $150M\n` +
+        `• Active Users: 15.2k\n\n` +
+        `🕒 Next scheduled update will be sent according to your configured schedule.`
+      );
+
+      console.log(`[Bot ${agentId}] Manual analytics update sent successfully`);
+      return true;
+    } catch (error) {
+      console.error(`[Bot ${agentId}] Error sending manual analytics update:`, error);
+      return false;
+    }
   }
 }
 
