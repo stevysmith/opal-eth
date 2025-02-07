@@ -48,9 +48,22 @@ const graphConfigSchema = z.object({
 
 type GraphConfigFormData = z.input<typeof graphConfigSchema>;
 
+interface WizardFormData {
+  template?: string;
+  graphConfig?: {
+    queryType: string;
+    schedule: string;
+    queryConfig: {
+      poolAddress?: string;
+      timeRange?: string;
+      topN?: number;
+    };
+  };
+}
+
 export default function GraphConfigStep() {
   const [, navigate] = useLocation();
-  const { formData, setFormData } = useWizard();
+  const { formData, setFormData } = useWizard<WizardFormData>();
   const { toast } = useToast();
 
   const form = useForm<GraphConfigFormData>({
@@ -67,7 +80,7 @@ export default function GraphConfigStep() {
 
   const onSubmit = (data: GraphConfigFormData) => {
     const queryConfig = {
-      ...(data.queryType === "pool_stats" 
+      ...(data.queryType === "pool_stats"
         ? { poolAddress: data.poolAddress, timeRange: data.timeRange }
         : { topN: data.topN, timeRange: data.timeRange }),
     };
@@ -80,7 +93,7 @@ export default function GraphConfigStep() {
         queryConfig,
       },
     });
-    
+
     navigate("/wizard/platform");
   };
 

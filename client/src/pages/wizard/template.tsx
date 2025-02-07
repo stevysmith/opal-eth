@@ -44,12 +44,8 @@ export default function TemplateStep() {
   const handleContinue = () => {
     if (selected) {
       setFormData({ ...formData, template: selected });
-      // Route to graph-config for graph_notify template, otherwise go to persona
-      if (selected === "graph_notify") {
-        navigate("/wizard/graph-config");
-      } else {
-        navigate("/wizard/persona");
-      }
+      // Always go to persona first
+      navigate("/wizard/persona");
     }
   };
 
