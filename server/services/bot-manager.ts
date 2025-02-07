@@ -137,7 +137,7 @@ class BotManager {
             this.setupPollCommands(bot, agentId);
           } else if (agent.template === "giveaway") {
             this.setupGiveawayCommands(bot, agentId);
-          } else if (agent.template === "qa") {
+          } else if (agent.template === "qa" || agent.template === "graph_notify") {
             this.setupQACommands(bot, agent);
           }
 
